@@ -72,48 +72,27 @@ CORS is configured on API Gateway to allow requests from the CloudFront distribu
 
 ```
 src/
-├── api/
-│   ├── client.ts           # Axios instance with auth interceptor
-│   ├── transactions.ts     # Transaction CRUD endpoints
-│   ├── categories.ts       # Category management endpoints
-│   └── reports.ts          # Aggregation and reporting endpoints
-│
+├── api/                    # HTTP client and resource modules
 ├── components/
-│   ├── ui/                 # Generic reusable components (Button, Input, Modal)
-│   ├── layout/             # AppShell, Sidebar, Header, PageWrapper
-│   ├── transactions/       # TransactionList, TransactionForm, TransactionRow
-│   ├── categories/         # CategoryTree, CategoryBadge, CategoryForm
-│   └── reports/            # MonthlyChart, CategoryBreakdown, NetWorthTrend
-│
-├── hooks/
-│   ├── useAuth.ts          # Cognito sign-in, sign-out, session state
-│   ├── useTransactions.ts  # TanStack Query hooks for transaction data
-│   ├── useCategories.ts    # TanStack Query hooks for category data
-│   └── useReports.ts       # TanStack Query hooks for report/aggregation data
-│
+│   ├── ui/                 # Generic reusable components
+│   ├── layout/             # Application chrome
+│   ├── transactions/       # Transaction-specific components
+│   ├── categories/         # Category-specific components
+│   └── reports/            # Reporting components
+├── hooks/                  # Shared and data-fetching hooks
 ├── pages/
-│   ├── LoginPage.tsx
-│   ├── DashboardPage.tsx
-│   ├── TransactionsPage.tsx
-│   ├── CategoriesPage.tsx
-│   └── ReportsPage.tsx
-│
-├── store/
-│   └── uiStore.ts          # Zustand store for UI-only state (sidebar, modals)
-│
-├── types/
-│   ├── transaction.ts
-│   ├── category.ts
-│   └── report.ts
-│
-├── utils/
-│   ├── currency.ts         # JPY/other currency formatting helpers
-│   └── dates.ts            # Date range helpers for report queries
-│
-├── main.tsx                # App entry point, Amplify config, QueryClient setup
-├── App.tsx                 # Router setup, auth guard
-└── vite.config.ts
+│   └── HomePage.tsx        # Neutral foundation placeholder
+├── store/                  # Zustand UI state
+├── styles/                 # Tailwind entry point and global styles
+├── test/                   # Shared test setup
+├── types/                  # Domain types
+├── utils/                  # Formatting and date helpers
+├── App.test.tsx
+├── App.tsx                 # Router setup
+└── main.tsx                # Application providers and entry point
 ```
+
+Vite, TypeScript, ESLint, PostCSS, and Tailwind configuration files live at the repository root. Feature files are added to the prepared directories as their issues are implemented.
 
 ---
 
@@ -127,7 +106,7 @@ src/
 | Auth | AWS Amplify JS v6 | Cognito integration, token refresh |
 | Data fetching | TanStack Query v5 | Server state, caching, background refetch |
 | HTTP client | Axios | Interceptors for JWT injection |
-| Routing | React Router v6 | Client-side SPA routing |
+| Routing | React Router v7 | Client-side SPA routing |
 | UI state | Zustand | Lightweight store for modals, sidebar |
 | Charts | Recharts | Declarative charts for spending reports |
 | Forms | React Hook Form + Zod | Performant forms with schema validation |
@@ -286,8 +265,8 @@ In production these are set as environment variables in the GitHub Actions deplo
 **Prerequisites**: Node.js 20+, npm 10+
 
 ```bash
-# Install dependencies
-npm install
+# Install exact locked dependencies
+npm ci
 
 # Start dev server with hot module replacement
 npm run dev
@@ -298,6 +277,9 @@ npm run typecheck
 
 # Linting
 npm run lint
+
+# Tests
+npm test
 ```
 
 The Vite dev server proxies `/api/*` requests to the deployed API Gateway URL to avoid CORS issues locally. This is configured in `vite.config.ts`:
@@ -352,7 +334,7 @@ name: Deploy frontend
 on:
   push:
     branches: [main]
-    paths: ['frontend/**']
+    paths: ['**']
 
 jobs:
   deploy:
@@ -392,11 +374,10 @@ jobs:
             --paths "/*"
 ```
 
-The workflow only runs when files inside the `frontend/` directory change, so backend-only commits do not trigger a frontend redeploy.
+The application lives at the repository root, so the workflow runs for changes in this repository.
 
 ---
 
-## Related
+## Repository root
 
-- [`/backend`](../backend/README.md) — Python Lambda + FastAPI backend
-- [`/infra`](../infra/README.md) — AWS SAM / Terraform infrastructure definitions
+This repository contains only the frontend. Run all npm commands from the repository root; `src/` is the application source and `dist/` is generated output.
