@@ -52,7 +52,8 @@ describe('authentication routing', () => {
     authMocks.getCurrentUser.mockResolvedValue({ username: 'user@example.com' })
     renderApp()
 
-    expect(await screen.findByRole('heading', { name: /financial workspace is ready/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /overview/i })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: /primary/i })).toBeInTheDocument()
   })
 
   it('validates credentials before submitting', async () => {
@@ -109,10 +110,30 @@ describe('authentication routing', () => {
     authMocks.getCurrentUser.mockResolvedValue({ username: 'user@example.com' })
     renderApp()
 
-    expect(await screen.findByRole('heading', { name: /financial workspace is ready/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /overview/i })).toBeInTheDocument()
 
     Hub.dispatch('auth', { event: 'tokenRefresh_failure' })
 
     expect(await screen.findByRole('heading', { name: /sign in/i })).toBeInTheDocument()
+  })
+
+  it('navigates between primary pages and indicates the active page', async () => {
+    authMocks.getCurrentUser.mockResolvedValue({ username: 'user@example.com' })
+    renderApp()
+
+    const transactionsLinks = await screen.findAllByRole('link', { name: 'Transactions' })
+    fireEvent.click(transactionsLinks[0])
+
+    expect(await screen.findByRole('heading', { name: 'Transactions', level: 2 })).toBeInTheDocument()
+    expect(transactionsLinks[0]).toHaveClass('text-indigo-700')
+    expect(screen.getByTestId('location')).toHaveTextContent('/transactions')
+  })
+
+  it('shows a not-found experience without leaving the authenticated shell', async () => {
+    authMocks.getCurrentUser.mockResolvedValue({ username: 'user@example.com' })
+    renderApp('/missing-page')
+
+    expect(await screen.findByRole('heading', { name: /page not found/i, level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /back to dashboard/i })).toBeInTheDocument()
   })
 })
