@@ -6,6 +6,7 @@ import App from '@/App'
 import '@/styles/index.css'
 import '@/auth/amplify'
 import { AuthProvider } from '@/auth/AuthContext'
+import { RouteErrorBoundary } from '@/components/RouteErrorBoundary'
 
 const queryClient = new QueryClient()
 
@@ -14,7 +15,7 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <App />
+          <RouteErrorBoundary><App /></RouteErrorBoundary>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>

@@ -1,37 +1,14 @@
-import { useState } from 'react'
-import { useAuth } from '@/auth/useAuth'
-
 export function HomePage() {
-  const { user, signOut } = useAuth()
-  const [signingOut, setSigningOut] = useState(false)
-
-  const handleSignOut = async () => {
-    setSigningOut(true)
-    try {
-      await signOut()
-    } catch (error) {
-      console.error('Failed to sign out', error)
-      setSigningOut(false)
-    }
-  }
-
+  const stats = [
+    { label: 'Total balance', value: '—', note: 'Across all accounts' },
+    { label: 'Income', value: '—', note: 'This month' },
+    { label: 'Expenses', value: '—', note: 'This month' },
+  ]
   return (
-    <main className="grid min-h-screen place-items-center bg-slate-50 px-6 text-slate-900">
-      <section className="max-w-lg text-center">
-        <p className="text-sm font-medium uppercase tracking-widest text-slate-500">
-          Finance
-        </p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight">
-          Your financial workspace is ready.
-        </h1>
-        <p className="mt-4 text-base leading-7 text-slate-600">
-          Transactions, budgets, and reports will appear here as they are added.
-        </p>
-        <p className="mt-6 text-sm text-slate-500">Signed in as {user?.signInDetails?.loginId ?? user?.username}</p>
-        <button type="button" onClick={handleSignOut} disabled={signingOut} className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
-          {signingOut ? 'Signing out…' : 'Sign out'}
-        </button>
-      </section>
-    </main>
+    <section aria-labelledby="dashboard-heading">
+      <div><h2 id="dashboard-heading" className="text-2xl font-bold tracking-tight text-slate-950">Overview</h2><p className="mt-1 text-sm text-slate-600">A quick look at your financial activity.</p></div>
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{stats.map((stat) => <article key={stat.label} className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-sm font-medium text-slate-600">{stat.label}</p><p className="mt-2 text-3xl font-bold tracking-tight text-slate-950">{stat.value}</p><p className="mt-1 text-xs text-slate-500">{stat.note}</p></article>)}</div>
+      <div className="mt-6 rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center"><h3 className="font-semibold">Your financial workspace is ready.</h3><p className="mt-2 text-sm text-slate-600">Your latest activity and insights will appear here as data is added.</p></div>
+    </section>
   )
 }
