@@ -8,11 +8,11 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     resolve: { alias: { '@': path.resolve(__dirname, './src') } },
-    server: env.VITE_API_BASE_URL
+    server: env.API_PROXY_TARGET
       ? {
           proxy: {
             '/api': {
-              target: env.VITE_API_BASE_URL,
+              target: env.API_PROXY_TARGET,
               changeOrigin: true,
               rewrite: (requestPath) => requestPath.replace(/^\/api/, ''),
             },

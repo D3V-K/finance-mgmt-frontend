@@ -164,30 +164,28 @@ export function useAuth() {
 
 ## API Communication
 
-All API calls are made through a shared Axios instance defined in `api/client.ts`. The instance automatically attaches the current Cognito ID token to every request and handles 401 responses by redirecting to `/login`.
+All API calls use the shared Axios instance in `src/api/client.ts`. It attaches the current Cognito ID token and normalizes failures into distinguishable `ApiError` kinds. A 401 is surfaced without an automatic retry or redirect, avoiding redirect loops.
 
 ```typescript
 // api/client.ts
 import axios from 'axios'
 import { fetchAuthSession } from 'aws-amplify/auth'
+import { normalizeApiError } from './errors'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL,
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
 })
 
 api.interceptors.request.use(async (config) => {
   const session = await fetchAuthSession()
   const token = session.tokens?.idToken?.toString()
-  if (token) config.headers.Authorization = `Bearer ${token}`
+  if (token) config.headers.set('Authorization', `Bearer ${token}`)
   return config
 })
 
 api.interceptors.response.use(
   (res) => res,
-  (err) => {
-    if (err.response?.status === 401) window.location.href = '/login'
-    return Promise.reject(err)
-  }
+  (err) => Promise.reject(normalizeApiError(err))
 )
 
 export default api
@@ -246,11 +244,12 @@ export function useCreateTransaction() {
 
 ## Environment Variables
 
-Create a `.env.local` file for local development. These values are injected at build time by Vite and embedded in the static bundle — do not store secrets here.
+Copy `.env.example` to `.env.local`. `VITE_*` values are embedded in the browser bundle and must not contain secrets. `API_PROXY_TARGET` is read only by Vite's local development server.
 
 ```bash
 # .env.local
-VITE_API_BASE_URL=https://your-api-id.execute-api.ap-northeast-1.amazonaws.com/prod
+VITE_API_BASE_URL=/api
+API_PROXY_TARGET=http://localhost:8000
 VITE_USER_POOL_ID=ap-northeast-1_XXXXXXXXX
 VITE_USER_POOL_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxx
 VITE_AWS_REGION=ap-northeast-1
@@ -282,14 +281,14 @@ npm run lint
 npm test
 ```
 
-The Vite dev server proxies `/api/*` requests to the deployed API Gateway URL to avoid CORS issues locally. This is configured in `vite.config.ts`:
+The Vite dev server proxies `/api/*` requests to `API_PROXY_TARGET` and strips the `/api` prefix. For production builds, set `VITE_API_BASE_URL` to the deployed API URL.
 
 ```typescript
 // vite.config.ts (proxy section)
 server: {
   proxy: {
     '/api': {
-      target: process.env.VITE_API_BASE_URL,
+      target: env.API_PROXY_TARGET,
       changeOrigin: true,
       rewrite: (path) => path.replace(/^\/api/, '')
     }
