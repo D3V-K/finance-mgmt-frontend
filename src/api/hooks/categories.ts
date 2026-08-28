@@ -22,7 +22,11 @@ export function useCreateCategory() {
   const client = useQueryClient()
   return useMutation({
     mutationFn: (payload: CategoryCreateDto) => categoriesApi.create(payload),
-    onSuccess: () => client.invalidateQueries({ queryKey: categoryKeys.all }),
+    onSuccess: () => Promise.all([
+      client.invalidateQueries({ queryKey: categoryKeys.all }),
+      client.invalidateQueries({ queryKey: transactionKeys.all }),
+      client.invalidateQueries({ queryKey: reportKeys.all }),
+    ]),
   })
 }
 
@@ -32,6 +36,7 @@ export function useUpdateCategory() {
     mutationFn: ({ id, payload }: { id: UUID; payload: CategoryUpdateDto }) => categoriesApi.update(id, payload),
     onSuccess: () => Promise.all([
       client.invalidateQueries({ queryKey: categoryKeys.all }),
+      client.invalidateQueries({ queryKey: transactionKeys.all }),
       client.invalidateQueries({ queryKey: reportKeys.all }),
     ]),
   })
