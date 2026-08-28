@@ -1,9 +1,9 @@
 import { apiClient } from '@/api/client'
-import type { Transaction, TransactionCreateDto, TransactionFilter, TransactionUpdateDto, UUID } from '@/api/types'
+import type { PaginatedResponse, Transaction, TransactionCreateDto, TransactionFilter, TransactionUpdateDto, UUID } from '@/api/types'
 
 export const transactionsApi = {
   async list(filters: TransactionFilter = {}) {
-    return (await apiClient.get<Transaction[]>('/transactions', { params: filters })).data
+    return (await apiClient.get<PaginatedResponse<Transaction>>('/transactions', { params: filters })).data
   },
   async get(id: UUID) {
     return (await apiClient.get<Transaction>(`/transactions/${id}`)).data
