@@ -19,6 +19,10 @@ vi.mock('@/api/hooks/transactions', () => ({
   useDeleteTransaction: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 vi.mock('@/api/hooks/categories', () => ({ useCategories: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }) }))
+vi.mock('@/api/hooks/reports', () => ({
+  useMonthlyReport: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useCategoryReport: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+}))
 
 function LocationProbe() {
   const location = useLocation()
