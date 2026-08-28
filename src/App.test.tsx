@@ -12,6 +12,13 @@ const authMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('aws-amplify/auth', () => authMocks)
+vi.mock('@/api/hooks/transactions', () => ({
+  useTransactions: () => ({ data: { items: [], total: 0, page: 1, page_size: 20, total_pages: 0 }, isLoading: false, isError: false, refetch: vi.fn() }),
+  useCreateTransaction: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateTransaction: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteTransaction: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}))
+vi.mock('@/api/hooks/categories', () => ({ useCategories: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }) }))
 
 function LocationProbe() {
   const location = useLocation()

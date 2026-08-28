@@ -53,6 +53,10 @@ export interface DateRangeFilter {
 
 export interface TransactionFilter extends DateRangeFilter {
   category_id?: UUID
+  type?: CategoryType
+  search?: string
+  page?: number
+  page_size?: number
 }
 
 // Reserved for endpoints that opt into pagination. Current backend list routes return arrays.
@@ -66,6 +70,7 @@ export interface PaginatedResponse<T> {
   page: number
   page_size: number
   total: number
+  total_pages: number
 }
 
 export interface MonthlyReport {
