@@ -4,9 +4,9 @@ import { LoginPage } from '@/pages/LoginPage'
 import { ProtectedRoute, PublicOnlyRoute } from '@/auth/routes'
 import { AppShell } from '@/components/layout/AppShell'
 import { NotFoundPage } from '@/pages/NotFoundPage'
-import { PlaceholderPage } from '@/pages/PlaceholderPage'
 import { CategoriesPage } from '@/pages/CategoriesPage'
 import { TransactionsPage } from '@/pages/TransactionsPage'
+import { ReportsPage } from '@/pages/ReportsPage'
 
 export default function App() {
   return (
@@ -19,7 +19,7 @@ export default function App() {
           <Route index element={<HomePage />} />
           <Route path="transactions" element={<TransactionsPage />} />
           <Route path="categories" element={<CategoriesPage />} />
-          <Route path="reports" element={<PlaceholderPage title="Reports" description="Understand trends across your finances." />} />
+          <Route path="reports" element={<ReportsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>
