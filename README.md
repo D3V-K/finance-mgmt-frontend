@@ -355,54 +355,29 @@ aws cloudfront create-invalidation \
 
 ## CI/CD Pipeline
 
-Deployment is automated via GitHub Actions on every push to `main`.
+Deployment is automated by `.github/workflows/deploy-frontend.yml`. A successful
+`Frontend quality` run on `main` builds the tested revision, assumes an AWS IAM
+role through GitHub OIDC, syncs `dist/` to S3, and optionally invalidates
+CloudFront. It can also be started manually with `workflow_dispatch`.
 
-```yaml
-# .github/workflows/deploy-frontend.yml
-name: Deploy frontend
+Create a GitHub environment named `production`, then configure:
 
-on:
-  push:
-    branches: [main]
-    paths: ['**']
+| Type | Name | Purpose |
+|---|---|---|
+| Secret | `AWS_ROLE_TO_ASSUME` | ARN of the IAM role trusted by GitHub's OIDC provider |
+| Variable | `AWS_REGION` | Region containing the S3 bucket |
+| Variable | `S3_BUCKET` | Destination bucket name, without `s3://` |
+| Variable (optional) | `CLOUDFRONT_DISTRIBUTION_ID` | Distribution to invalidate after upload |
+| Variable | `VITE_API_BASE_URL` | Production API URL embedded in the bundle |
+| Variable | `VITE_USER_POOL_ID` | Production Cognito user pool ID |
+| Variable | `VITE_USER_POOL_CLIENT_ID` | Production Cognito app client ID |
+| Variable | `VITE_AWS_REGION` | Cognito region; falls back to `AWS_REGION` |
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - run: npm ci
-
-      - run: npm run typecheck
-
-      - run: npm run build
-        env:
-          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
-          VITE_USER_POOL_ID: ${{ secrets.VITE_USER_POOL_ID }}
-          VITE_USER_POOL_CLIENT_ID: ${{ secrets.VITE_USER_POOL_CLIENT_ID }}
-          VITE_AWS_REGION: ${{ secrets.VITE_AWS_REGION }}
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-northeast-1
-
-      - name: Sync to S3
-        run: aws s3 sync dist/ s3://${{ secrets.S3_BUCKET }} --delete
-
-      - name: Invalidate CloudFront
-        run: |
-          aws cloudfront create-invalidation \
-            --distribution-id ${{ secrets.CF_DISTRIBUTION_ID }} \
-            --paths "/*"
-```
+The IAM role needs permission to list the bucket, upload and delete objects, and,
+when configured, create CloudFront invalidations. Scope the role's GitHub OIDC
+trust policy to this repository and the `production` environment. The Vite values
+are repository/environment variables rather than secrets because Vite embeds them
+in browser-delivered JavaScript; never put credentials in a `VITE_*` value.
 
 The application lives at the repository root, so the workflow runs for changes in this repository.
 
