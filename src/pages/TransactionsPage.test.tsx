@@ -3,7 +3,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import { TransactionsPage } from '@/pages/TransactionsPage'
 
 const mocks = vi.hoisted(() => ({ create: vi.fn(), update: vi.fn(), remove: vi.fn(), filters: [] as unknown[] }))
-const category = { id: 'cat-1', user_id: 'user', name: 'Salary', type: 'INCOME' as const, color: '#059669', parent_id: null, created_at: '2026-01-01T00:00:00Z' }
+const category = { id: 'cat-1', user_id: 'user', name: 'Salary', type: 'income' as const, color: '#059669', parent_id: null, created_at: '2026-01-01T00:00:00Z' }
 const transaction = { id: 'txn-1', user_id: 'user', amount: 120000, description: 'August salary', category_id: 'cat-1', transaction_date: '2026-08-25', created_at: '2026-08-25T00:00:00Z' }
 
 vi.mock('@/api/hooks/categories', () => ({ useCategories: () => ({ data: [category], isLoading: false, isError: false, refetch: vi.fn() }) }))
@@ -23,9 +23,9 @@ describe('TransactionsPage', () => {
   it('shows transactions and preserves filters in the URL', async () => {
     renderPage()
     expect(screen.getByText('August salary')).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'INCOME' } })
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('type=INCOME'))
-    expect(mocks.filters.at(-1)).toMatchObject({ type: 'INCOME', page: 1, page_size: 20 })
+    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'income' } })
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('type=income'))
+    expect(mocks.filters.at(-1)).toMatchObject({ type: 'income', page: 1, page_size: 20 })
   })
 
   it('validates and creates a transaction', async () => {

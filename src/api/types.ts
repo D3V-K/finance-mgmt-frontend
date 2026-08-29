@@ -2,7 +2,7 @@ export type UUID = string
 export type ISODate = string
 export type ISODateTime = string
 
-export type CategoryType = 'INCOME' | 'EXPENSE'
+export type CategoryType = 'income' | 'expense'
 
 export interface Category {
   id: UUID

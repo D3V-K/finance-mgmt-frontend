@@ -44,7 +44,7 @@ describe('monthly dashboard', () => {
     expect(mocks.monthly).toHaveBeenCalledWith({ from: '2026-02-01', to: '2026-07-31' })
     expect(mocks.categories).toHaveBeenCalledWith({ from: '2026-07-01', to: '2026-07-31' })
     expect(mocks.transactions).toHaveBeenCalledWith({ from: '2026-07-01', to: '2026-07-31', page: 1, page_size: 5 })
-    expect(screen.getByRole('link', { name: /income.*view transactions/i })).toHaveAttribute('href', '/transactions?from=2026-07-01&to=2026-07-31&type=INCOME')
+    expect(screen.getByRole('link', { name: /income.*view transactions/i })).toHaveAttribute('href', '/transactions?from=2026-07-01&to=2026-07-31&type=income')
   })
 
   it('stores month changes in the URL and updates every widget filter', () => {

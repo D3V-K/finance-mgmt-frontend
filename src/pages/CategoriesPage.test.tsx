@@ -7,10 +7,10 @@ const mocks = vi.hoisted(() => ({
 }))
 
 const parent = {
-  id: 'parent', user_id: 'user', name: 'Housing', type: 'EXPENSE' as const, color: '#e11d48', parent_id: null, created_at: '2026-01-01T00:00:00Z',
-  children: [{ id: 'child', user_id: 'user', name: 'Rent', type: 'EXPENSE' as const, color: '#f43f5e', parent_id: 'parent', created_at: '2026-01-01T00:00:00Z', children: [] }],
+  id: 'parent', user_id: 'user', name: 'Housing', type: 'expense' as const, color: '#e11d48', parent_id: null, created_at: '2026-01-01T00:00:00Z',
+  children: [{ id: 'child', user_id: 'user', name: 'Rent', type: 'expense' as const, color: '#f43f5e', parent_id: 'parent', created_at: '2026-01-01T00:00:00Z', children: [] }],
 }
-const income = { id: 'income', user_id: 'user', name: 'Salary', type: 'INCOME' as const, color: '#059669', parent_id: null, created_at: '2026-01-01T00:00:00Z', children: [] }
+const income = { id: 'income', user_id: 'user', name: 'Salary', type: 'income' as const, color: '#059669', parent_id: null, created_at: '2026-01-01T00:00:00Z', children: [] }
 const tree = [parent, income]
 const list = [parent, parent.children[0], income]
 
@@ -34,7 +34,7 @@ describe('CategoriesPage', () => {
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: '  Groceries  ' } })
     fireEvent.click(screen.getByRole('button', { name: /create category/i }))
-    await waitFor(() => expect(mocks.create).toHaveBeenCalledWith({ name: 'Groceries', type: 'EXPENSE', parent_id: null, color: '#e11d48' }))
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledWith({ name: 'Groceries', type: 'expense', parent_id: null, color: '#e11d48' }))
   })
 
   it('prevents a category from becoming its own ancestor', () => {

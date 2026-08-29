@@ -25,6 +25,23 @@ describe('typed API resources', () => {
     expect(apiClient.get).toHaveBeenCalledWith('/categories/tree')
   })
 
+  it.each([
+    { response: [{ id: 'category-1' }], label: 'an array' },
+    { response: { items: [{ id: 'category-1' }] }, label: 'an items envelope' },
+    { response: { categories: [{ id: 'category-1' }] }, label: 'a categories envelope' },
+    { response: { data: { items: [{ id: 'category-1' }] } }, label: 'a nested data envelope' },
+  ])('normalizes category lists returned as $label', async ({ response }) => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: response })
+
+    await expect(categoriesApi.list()).resolves.toEqual([{ id: 'category-1' }])
+  })
+
+  it('normalizes wrapped category trees', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { categories: [{ id: 'category-1', children: [] }] } })
+
+    await expect(categoriesApi.tree()).resolves.toEqual([{ id: 'category-1', children: [] }])
+  })
+
   it('uses the backend report route and date filters', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: [] })
     const filters = { from: '2026-01-01' }

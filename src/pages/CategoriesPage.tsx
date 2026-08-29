@@ -13,7 +13,7 @@ import { Input, Select } from '@/components/ui/FormControls'
 
 const schema = z.object({
   name: z.string().trim().min(1, 'Name is required.').max(100, 'Name must be 100 characters or fewer.'),
-  type: z.enum(['INCOME', 'EXPENSE']),
+  type: z.enum(['income', 'expense']),
   parent_id: z.string(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Choose a valid color.'),
 })
@@ -43,7 +43,7 @@ function CategoryForm({ category, categories, tree, onDone }: { category: Catego
   const [submitError, setSubmitError] = useState('')
   const { register, handleSubmit, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: category?.name ?? '', type: category?.type ?? 'EXPENSE', parent_id: category?.parent_id ?? '', color: category?.color ?? (category?.type === 'INCOME' ? '#059669' : '#e11d48') },
+    defaultValues: { name: category?.name ?? '', type: category?.type ?? 'expense', parent_id: category?.parent_id ?? '', color: category?.color ?? (category?.type === 'income' ? '#059669' : '#e11d48') },
   })
   const selectedType = watch('type')
   const excluded = category ? new Set([category.id, ...descendantIds(tree, category.id)]) : new Set<string>()
@@ -61,7 +61,7 @@ function CategoryForm({ category, categories, tree, onDone }: { category: Catego
     {submitError && <Alert>{submitError}</Alert>}
     <Input id="category-name" label="Name" autoFocus {...register('name')} error={errors.name?.message} />
     <Select id="category-type" label="Type" {...register('type')} error={errors.type?.message}>
-      <option value="EXPENSE">Expense</option><option value="INCOME">Income</option>
+      <option value="expense">Expense</option><option value="income">Income</option>
     </Select>
     <Select id="category-parent" label="Parent (optional)" {...register('parent_id')} error={errors.parent_id?.message}>
       <option value="">No parent</option>
@@ -91,7 +91,7 @@ export function CategoriesPage() {
   const [deleteError, setDeleteError] = useState('')
   const tree = useMemo(() => treeQuery.data ?? [], [treeQuery.data])
   const categories = useMemo(() => listQuery.data ?? flattenTree(tree), [listQuery.data, tree])
-  const groups = (['EXPENSE', 'INCOME'] as CategoryType[]).map((type) => ({ type, nodes: tree.filter((node) => node.type === type) }))
+  const groups = (['expense', 'income'] as CategoryType[]).map((type) => ({ type, nodes: tree.filter((node) => node.type === type) }))
   const confirmDelete = async () => {
     if (!deleting) return
     setDeleteError('')
@@ -105,7 +105,7 @@ export function CategoriesPage() {
   if (treeQuery.isError) return <div className="space-y-4"><Alert>Could not load categories. {normalizeApiError(treeQuery.error).message}</Alert><Button variant="secondary" onClick={() => treeQuery.refetch()}>Try again</Button></div>
   return <section aria-labelledby="categories-heading" className="space-y-6">
     <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 id="categories-heading" className="text-2xl font-bold tracking-tight">Category management</h2><p className="mt-1 text-sm text-slate-600">Organize income and expenses into groups for clearer reports.</p></div><Button onClick={() => setEditing(null)}>New category</Button></div>
-    {tree.length === 0 ? <EmptyState title="No categories yet" description="Create an income or expense category to start organizing transactions." action={<Button onClick={() => setEditing(null)}>Create category</Button>} /> : <div className="grid gap-6 lg:grid-cols-2">{groups.map(({ type, nodes }) => <section key={type} aria-labelledby={`${type.toLowerCase()}-heading`} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 px-4 py-4"><h3 id={`${type.toLowerCase()}-heading`} className="font-semibold">{type === 'EXPENSE' ? 'Expense categories' : 'Income categories'}</h3><p className="text-xs text-slate-500">{nodes.length} top-level {nodes.length === 1 ? 'category' : 'categories'}</p></div>{nodes.length ? <ul>{nodes.map((node) => <TreeRow key={node.id} node={node} depth={0} onEdit={setEditing} onDelete={setDeleting} />)}</ul> : <p className="px-4 py-8 text-center text-sm text-slate-500">No {type.toLowerCase()} categories.</p>}</section>)}</div>}
+    {tree.length === 0 ? <EmptyState title="No categories yet" description="Create an income or expense category to start organizing transactions." action={<Button onClick={() => setEditing(null)}>Create category</Button>} /> : <div className="grid gap-6 lg:grid-cols-2">{groups.map(({ type, nodes }) => <section key={type} aria-labelledby={`${type}-heading`} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 px-4 py-4"><h3 id={`${type}-heading`} className="font-semibold">{type === 'expense' ? 'Expense categories' : 'Income categories'}</h3><p className="text-xs text-slate-500">{nodes.length} top-level {nodes.length === 1 ? 'category' : 'categories'}</p></div>{nodes.length ? <ul>{nodes.map((node) => <TreeRow key={node.id} node={node} depth={0} onEdit={setEditing} onDelete={setDeleting} />)}</ul> : <p className="px-4 py-8 text-center text-sm text-slate-500">No {type} categories.</p>}</section>)}</div>}
     <Dialog open={editing !== undefined} title={editing ? 'Edit category' : 'Create category'} onClose={() => setEditing(undefined)}>{editing !== undefined && <CategoryForm key={editing?.id ?? 'new'} category={editing} categories={categories} tree={tree} onDone={() => setEditing(undefined)} />}</Dialog>
     <Dialog open={!!deleting} title="Delete category?" onClose={() => { if (!remove.isPending) { setDeleting(null); setDeleteError('') } }}><div className="space-y-4">{deleteError && <Alert>{deleteError}</Alert>}<p className="text-sm text-slate-600">Delete <strong>{deleting?.name}</strong>? This cannot be undone. Categories with transactions or children cannot be deleted.</p><div className="flex justify-end gap-3"><Button variant="secondary" disabled={remove.isPending} onClick={() => setDeleting(null)}>Cancel</Button><Button variant="danger" loading={remove.isPending} onClick={confirmDelete}>Delete category</Button></div></div></Dialog>
   </section>

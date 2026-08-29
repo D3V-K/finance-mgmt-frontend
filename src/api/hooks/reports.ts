@@ -9,12 +9,12 @@ export const reportKeys = {
   netWorth: (filters: DateRangeFilter) => [...reportKeys.all, 'net-worth', filters] as const,
 }
 
-export function useMonthlyReport(filters: DateRangeFilter = {}) {
-  return useQuery({ queryKey: reportKeys.monthly(filters), queryFn: () => reportsApi.monthly(filters) })
+export function useMonthlyReport(filters: DateRangeFilter = {}, enabled = true) {
+  return useQuery({ queryKey: reportKeys.monthly(filters), queryFn: () => reportsApi.monthly(filters), enabled })
 }
 
-export function useCategoryReport(filters: DateRangeFilter = {}) {
-  return useQuery({ queryKey: reportKeys.byCategory(filters), queryFn: () => reportsApi.byCategory(filters) })
+export function useCategoryReport(filters: DateRangeFilter = {}, enabled = true) {
+  return useQuery({ queryKey: reportKeys.byCategory(filters), queryFn: () => reportsApi.byCategory(filters), enabled })
 }
 
 export function useNetWorthReport(filters: DateRangeFilter = {}) {
