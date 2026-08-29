@@ -15,10 +15,12 @@ import {
 import { AuthContext } from '@/auth/auth-context'
 
 export function AuthProvider({ children }: PropsWithChildren) {
+  const e2eMode = import.meta.env.MODE === 'e2e'
   const [user, setUser] = useState<AuthUser | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!e2eMode)
 
   useEffect(() => {
+    if (e2eMode) return
     let active = true
 
     getCurrentUser()
@@ -35,9 +37,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return () => {
       active = false
     }
-  }, [])
+  }, [e2eMode])
 
   useEffect(() => {
+    if (e2eMode) return
     const unsubscribe = Hub.listen('auth', ({ payload }) => {
       if (payload.event === 'signedOut' || payload.event === 'tokenRefresh_failure') {
         setUser(null)
@@ -45,23 +48,31 @@ export function AuthProvider({ children }: PropsWithChildren) {
     })
 
     return unsubscribe
-  }, [])
+  }, [e2eMode])
 
   const signIn = useCallback(async (email: string, password: string) => {
+    if (e2eMode) {
+      setUser({ username: email, userId: 'e2e-user' } as AuthUser)
+      return
+    }
     const result = await amplifySignIn({ username: email, password })
     if (!result.isSignedIn) {
       throw new Error('Additional sign-in steps are required. Contact support.')
     }
     setUser(await getCurrentUser())
-  }, [])
+  }, [e2eMode])
 
   const signOut = useCallback(async () => {
+    if (e2eMode) {
+      setUser(null)
+      return
+    }
     try {
       await amplifySignOut()
     } finally {
       setUser(null)
     }
-  }, [])
+  }, [e2eMode])
 
   const value = useMemo(
     () => ({ user, loading, isAuthenticated: user !== null, signIn, signOut }),

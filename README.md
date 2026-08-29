@@ -15,6 +15,7 @@ A personal finance management application built with React and TypeScript, deplo
 - [State Management](#state-management)
 - [Environment Variables](#environment-variables)
 - [Local Development](#local-development)
+- [Quality and Testing](#quality-and-testing)
 - [Building and Deployment](#building-and-deployment)
 - [CI/CD Pipeline](#cicd-pipeline)
 
@@ -280,6 +281,36 @@ npm run lint
 # Tests
 npm test
 ```
+
+## Quality and Testing
+
+Run the complete local quality gate before opening a pull request:
+
+```bash
+npm run quality
+```
+
+The gate runs TypeScript checking, ESLint, the Vitest unit/component suite, and a
+production build. Tests use React Testing Library and `user-event` for user-facing
+behavior, MSW handlers in `src/test/` for deterministic backend responses, and
+reusable Cognito fakes so they never require AWS credentials or a live API.
+
+Automated `jest-axe` checks cover the login, dashboard, transactions, categories,
+and reports pages plus the primary create dialogs. These checks catch many serious
+accessibility regressions, but do not replace keyboard and screen-reader review.
+
+The Playwright smoke suite covers the protected-route login redirect, primary
+navigation, and transaction creation in Chromium. Install its browser once, then run:
+
+```bash
+npm run test:e2e:install
+npm run test:e2e
+```
+
+Playwright starts Vite in the dedicated `e2e` mode, which substitutes an in-memory
+session for Cognito while Playwright intercepts API calls. Never use that mode for
+a deployed build. GitHub Actions runs both the quality gate and browser smoke
+suite for pull requests and pushes to `main`.
 
 The Vite dev server proxies `/api/*` requests to `API_PROXY_TARGET` and strips the `/api` prefix. For production builds, set `VITE_API_BASE_URL` to the deployed API URL.
 
