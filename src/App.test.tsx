@@ -19,6 +19,8 @@ vi.mock('@/api/hooks/transactions', () => ({
   useDeleteTransaction: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 vi.mock('@/api/hooks/categories', () => ({ useCategories: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }) }))
+vi.mock('@/api/hooks/balance', () => ({ useCurrentBalance: () => ({ data: { cash_balance: 0, bank_balance: 0, total_balance: 0 }, isLoading: false, isError: false }) }))
+vi.mock('@/api/hooks/openingBalances', () => ({ useOpeningBalances: () => ({ data: [], isLoading: false, isError: false }) }))
 vi.mock('@/api/hooks/reports', () => ({
   useMonthlyReport: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
   useCategoryReport: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),

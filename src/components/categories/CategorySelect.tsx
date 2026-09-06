@@ -1,5 +1,6 @@
-import type { SelectHTMLAttributes } from 'react'
+import { forwardRef, type SelectHTMLAttributes } from 'react'
 import type { Category, CategoryType } from '@/api/types'
+import { Select } from '@/components/ui/FormControls'
 
 type Props = SelectHTMLAttributes<HTMLSelectElement> & {
   categories: Category[]
@@ -9,14 +10,42 @@ type Props = SelectHTMLAttributes<HTMLSelectElement> & {
   placeholder?: string
 }
 
-export function CategorySelect({ categories, label, error, type, placeholder = 'Select a category', id = 'category', ...props }: Props) {
-  const options = categories.filter((category) => !type || category.type === type)
-  return <div>
-    <label htmlFor={id} className="block text-sm font-medium text-slate-700">{label}</label>
-    <select id={id} aria-invalid={!!error} aria-describedby={error ? `${id}-error` : undefined} className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-100" {...props}>
-      <option value="">{placeholder}</option>
-      {options.map((category) => <option key={category.id} value={category.id}>{category.name} ({category.type === 'income' ? 'Income' : 'Expense'})</option>)}
-    </select>
-    {error && <p id={`${id}-error`} className="mt-1 text-sm text-red-700">{error}</p>}
-  </div>
+// Keep parents before children even when the API list is unordered. Full paths
+// remain readable in the closed native picker and distinguish duplicate names.
+function categoryOptions(categories: Category[]) {
+  const byId = new Map(categories.map((category) => [category.id, category]))
+  const children = new Map<string, Category[]>()
+  for (const category of categories) {
+    if (!category.parent_id || !byId.has(category.parent_id)) continue
+    const siblings = children.get(category.parent_id) ?? []
+    siblings.push(category)
+    children.set(category.parent_id, siblings)
+  }
+  const result: Array<{ category: Category; label: string }> = []
+  const visited = new Set<string>()
+  const visit = (category: Category, ancestors: string[]) => {
+    if (visited.has(category.id)) return
+    visited.add(category.id)
+    const path = [...ancestors, category.name]
+    result.push({ category, label: path.join(' › ') })
+    for (const child of children.get(category.id) ?? []) visit(child, path)
+  }
+  for (const category of categories) {
+    if (!category.parent_id || !byId.has(category.parent_id)) visit(category, [])
+  }
+  // Preserve selectable values even if a stale response contains a cycle.
+  for (const category of categories) visit(category, [])
+  return result
 }
+
+export const CategorySelect = forwardRef<HTMLSelectElement, Props>(function CategorySelect({ categories, label, error, type, placeholder = 'Select a category', id = 'category', ...props }, ref) {
+  return <Select ref={ref} id={id} label={label} error={error} {...props}>
+    <option value="">{placeholder}</option>
+    {(['income', 'expense'] as const).filter((group) => !type || type === group).map((group) => {
+      const options = categoryOptions(categories.filter((category) => category.type === group))
+      return options.length > 0 && <optgroup key={group} label={group === 'income' ? 'Income' : 'Expenses'}>
+        {options.map(({ category, label: path }) => <option key={category.id} value={category.id}>{path}</option>)}
+      </optgroup>
+    })}
+  </Select>
+})

@@ -11,6 +11,9 @@ const CategoriesPage = lazy(() => import('@/pages/CategoriesPage').then((module)
 const TransactionsPage = lazy(() => import('@/pages/TransactionsPage').then((module) => ({ default: module.TransactionsPage })))
 const ReportsPage = lazy(() => import('@/pages/ReportsPage').then((module) => ({ default: module.ReportsPage })))
 
+const TransfersPage = lazy(() => import('@/pages/TransfersPage').then((module) => ({ default: module.TransfersPage })))
+const OpeningBalancesPage = lazy(() => import('@/pages/OpeningBalancesPage').then((module) => ({ default: module.OpeningBalancesPage })))
+
 export default function App() {
   return (
     <Suspense fallback={<div className="grid min-h-screen place-items-center"><Spinner label="Loading page…" /></div>}>
@@ -22,6 +25,8 @@ export default function App() {
           <Route element={<AppShell />}>
             <Route index element={<HomePage />} />
             <Route path="transactions" element={<TransactionsPage />} />
+            <Route path="transfers" element={<TransfersPage />} />
+            <Route path="opening-balances" element={<OpeningBalancesPage />} />
             <Route path="categories" element={<CategoriesPage />} />
             <Route path="reports" element={<ReportsPage />} />
             <Route path="*" element={<NotFoundPage />} />

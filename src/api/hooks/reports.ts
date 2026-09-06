@@ -20,3 +20,8 @@ export function useCategoryReport(filters: DateRangeFilter = {}, enabled = true)
 export function useNetWorthReport(filters: DateRangeFilter = {}) {
   return useQuery({ queryKey: reportKeys.netWorth(filters), queryFn: () => reportsApi.netWorth(filters) })
 }
+
+// Retain the existing cache prefix and endpoint for API compatibility.
+export function useNetBalanceReport(filters: DateRangeFilter = {}, enabled = true) {
+  return useQuery({ queryKey: reportKeys.netWorth(filters), queryFn: () => reportsApi.netBalance(filters), enabled })
+}

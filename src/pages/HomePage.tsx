@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { useCurrentBalance } from '@/api/hooks/balance'
+import { useOpeningBalances } from '@/api/hooks/openingBalances'
 import { normalizeApiError } from '@/api/errors'
 import { useCategoryReport, useMonthlyReport } from '@/api/hooks/reports'
 import { useTransactions } from '@/api/hooks/transactions'
@@ -54,6 +56,19 @@ function SummaryCards({ data, month }: { data: MonthlyReport[]; month: string })
   })}</div>
 }
 
+function CurrentBalances() {
+  const balance = useCurrentBalance()
+  const opening = useOpeningBalances()
+  return <section aria-labelledby="balance-heading" className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="flex flex-wrap items-center justify-between gap-3"><h3 id="balance-heading" className="text-lg font-semibold">Current balance</h3><Link to="/opening-balances" className="text-sm font-semibold text-indigo-700 underline">Opening balances</Link></div>
+    <p className="text-sm text-slate-600">Funds available now across Cash and Bank, independent of the selected month.</p>
+    {opening.data?.length === 0 && <Alert tone="info">Set your starting Cash and Bank balances to make these totals complete. These are a starting point, not income. <Link to="/opening-balances" className="font-semibold underline">Set up opening balances</Link>. You can keep recording transactions in the meantime.</Alert>}
+    {opening.data?.length === 1 && <Alert tone="info">One account has no opening balance. <Link to="/opening-balances" className="underline">Complete opening balances</Link> if needed.</Alert>}
+    {opening.isError && <p className="text-sm text-slate-600">Opening balance setup status is unavailable. <button className="underline" onClick={() => opening.refetch()}>Retry setup status</button></p>}
+    {balance.isLoading ? <div role="status">Loading current balance…<Skeleton className="mt-2 h-24" /></div> : balance.isError ? <div className="space-y-3"><Alert>Could not load current balance. {normalizeApiError(balance.error).message}</Alert><Button variant="secondary" onClick={() => balance.refetch()}>Retry current balance</Button></div> : balance.data && <dl className="grid gap-5 sm:grid-cols-3">{[{ label: 'Total balance', value: balance.data.total_balance }, { label: 'Cash', value: balance.data.cash_balance }, { label: 'Bank', value: balance.data.bank_balance }].map((item, index) => <div key={item.label} className="min-w-0"><dt className="text-sm text-slate-600">{item.label}</dt><dd className={`mt-1 break-words font-bold ${index === 0 ? 'text-3xl' : 'text-2xl'}`}>{formatJPY(item.value)}</dd></div>)}</dl>}
+  </section>
+}
+
 export function HomePage() {
   const [params, setParams] = useSearchParams()
   const requestedMonth = params.get('month') ?? ''
@@ -78,7 +93,10 @@ export function HomePage() {
 
   return <section aria-labelledby="dashboard-heading" className="space-y-6">
     <div className="flex flex-wrap items-end justify-between gap-4"><div><h2 id="dashboard-heading" className="text-2xl font-bold tracking-tight text-slate-950">Overview</h2><p className="mt-1 text-sm text-slate-600">Your financial activity for {monthLabel(month, 'long')}.</p></div><label className="text-sm font-medium text-slate-700">Month<input aria-label="Dashboard month" type="month" value={month} onChange={(event) => setParams({ month: event.target.value })} className="mt-1 block min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" /></label></div>
+    <CurrentBalances />
+    <section aria-labelledby="period-heading" className="space-y-3"><h3 id="period-heading" className="text-lg font-semibold">Monthly cash flow · {monthLabel(month, 'long')}</h3><p className="text-sm text-slate-600">Cash flow is income minus expenses during the selected month.</p>
     {monthlyQuery.isLoading ? <div aria-label="Loading summary" className="grid gap-4 sm:grid-cols-3"><Skeleton className="h-32"/><Skeleton className="h-32"/><Skeleton className="h-32"/></div> : monthlyQuery.isError ? <ErrorPanel message={`Could not load the monthly summary. ${normalizeApiError(monthlyQuery.error).message}`} retry={() => monthlyQuery.refetch()} /> : <SummaryCards data={monthlyQuery.data ?? []} month={month} />}
+    </section>
 
     <div className="grid gap-6 xl:grid-cols-3">
       <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2" aria-labelledby="trend-heading"><h3 id="trend-heading" className="font-semibold text-slate-950">Income versus expenses</h3><p className="mt-1 text-sm text-slate-500">Six months through {monthLabel(month)}.</p>

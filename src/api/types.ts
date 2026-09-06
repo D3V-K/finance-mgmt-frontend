@@ -2,6 +2,8 @@ export type UUID = string
 export type ISODate = string
 export type ISODateTime = string
 
+export type AccountType = 'cash' | 'bank'
+
 export type CategoryType = 'income' | 'expense'
 
 export interface Category {
@@ -28,6 +30,7 @@ export interface CategoryCreateDto {
 export type CategoryUpdateDto = Partial<CategoryCreateDto>
 
 export interface Transaction {
+  account_type: AccountType
   id: UUID
   user_id: UUID
   amount: number
@@ -38,6 +41,7 @@ export interface Transaction {
 }
 
 export interface TransactionCreateDto {
+  account_type: AccountType
   amount: number
   description?: string | null
   category_id: UUID
@@ -85,7 +89,48 @@ export interface CategoryReport {
   total: number
 }
 
-export interface NetWorthPoint {
+// The wire field retains the backend compatibility name.
+export interface NetBalancePoint {
   month: ISODate
   net_worth: number
 }
+
+export interface OpeningBalanceUpsertDto {
+  amount: number
+  as_of_date: ISODate
+}
+
+export interface OpeningBalance extends OpeningBalanceUpsertDto {
+  id: UUID
+  user_id: UUID
+  account_type: AccountType
+  created_at: ISODateTime
+  updated_at: ISODateTime
+}
+
+export interface TransferCreateDto {
+  from_account: AccountType
+  to_account: AccountType
+  amount: number
+  transfer_date: ISODate
+  description?: string | null
+}
+
+export interface Transfer extends TransferCreateDto {
+  id: UUID
+  user_id: UUID
+  created_at: ISODateTime
+  description: string | null
+}
+
+export interface TransferFilter extends DateRangeFilter, PaginationParams {}
+
+export type NetWorthPoint = NetBalancePoint
+
+export interface AccountBalance {
+  cash_balance: number
+  bank_balance: number
+  total_balance: number
+}
+
+export type CurrentBalance = AccountBalance
