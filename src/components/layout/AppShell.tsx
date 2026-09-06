@@ -8,6 +8,8 @@ type IconName = 'dashboard' | 'transactions' | 'categories' | 'reports'
 const paths: Array<{ to: string; label: string; icon: IconName }> = [
   { to: '/', label: 'Dashboard', icon: 'dashboard' },
   { to: '/transactions', label: 'Transactions', icon: 'transactions' },
+  { to: '/transfers', label: 'Transfers', icon: 'transactions' },
+  { to: '/opening-balances', label: 'Opening balances', icon: 'dashboard' },
   { to: '/categories', label: 'Categories', icon: 'categories' },
   { to: '/reports', label: 'Reports', icon: 'reports' },
 ]

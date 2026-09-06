@@ -36,6 +36,14 @@ Browser
 
 ---
 
+## Cash and Bank ledger
+
+The dashboard separates current Cash, Bank, and total balances from selected-month cash flow. Transactions require an explicit Cash or Bank account. Opening balances can be set or corrected at `/opening-balances`, including zero amounts and separate baseline dates. Transfers have their own create/delete history at `/transfers`; they do not count as income or expenses.
+
+The frontend follows the sibling `finance-mgmt-backend-lite` contract: lowercase `cash`/`bank`, `GET /reports/balance`, `GET /opening-balances`, account-specific opening balance `PUT` requests, and paginated transfers. Net balance history retains `/reports/net-worth` and its `net_worth` response field for compatibility; user-facing labels say “Net balance.” Only returned values are plotted, with missing months represented as gaps.
+
+Backend limitations: transaction account filtering is not exposed, so account filters and account drill-down links are omitted. The current history endpoint returns an empty series for opening balances without transactions; the frontend explains that empty state and does not manufacture baseline points. These backend behaviors must change before opening-only history can be displayed.
+
 ## Architecture
 
 ### Static Hosting (S3 + CloudFront)
@@ -300,7 +308,7 @@ and reports pages plus the primary create dialogs. These checks catch many serio
 accessibility regressions, but do not replace keyboard and screen-reader review.
 
 The Playwright smoke suite covers the protected-route login redirect, primary
-navigation, and transaction creation in Chromium. Install its browser once, then run:
+navigation, transaction account selection, opening balance setup, transfer creation/deletion, and balance history on a mobile viewport in Chromium. Install its browser once, then run:
 
 ```bash
 npm run test:e2e:install

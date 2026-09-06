@@ -2,12 +2,12 @@ import { useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { normalizeApiError } from '@/api/errors'
-import { useCategoryReport, useMonthlyReport } from '@/api/hooks/reports'
+import { useCategoryReport, useMonthlyReport, useNetBalanceReport } from '@/api/hooks/reports'
 import { Button } from '@/components/ui/Button'
 import { Alert, EmptyState, Skeleton } from '@/components/ui/Feedback'
 import { Input, Select } from '@/components/ui/FormControls'
 import { formatJPY } from '@/utils/format'
-import { buildTrendData, isValidISODate, presetRange, type ReportPreset } from '@/utils/reporting'
+import { buildTrendData, monthKeys, isValidISODate, presetRange, type ReportPreset } from '@/utils/reporting'
 
 const PRESETS: Array<{ value: ReportPreset; label: string }> = [{ value: '3m', label: 'Last 3 months' }, { value: '6m', label: 'Last 6 months' }, { value: '12m', label: 'Last 12 months' }, { value: 'ytd', label: 'Year to date' }, { value: 'custom', label: 'Custom range' }]
 const CATEGORY_COLORS = ['#4f46e5', '#0891b2', '#7c3aed', '#c026d3', '#ea580c', '#64748b']
@@ -30,6 +30,11 @@ export function ReportsPage() {
   const dateError = !isValidISODate(from) || !isValidISODate(to) ? 'Enter valid start and end dates.' : from > to ? 'Start date must be on or before end date.' : ''
   const filters = useMemo(() => dateError ? {} : { from, to }, [dateError, from, to])
   const monthlyQuery = useMonthlyReport(filters, !dateError)
+  const balanceQuery = useNetBalanceReport(filters, !dateError)
+  const balanceData = useMemo(() => {
+    const points = new Map((balanceQuery.data ?? []).map((point) => [point.month.slice(0, 7), point.net_worth]))
+    return dateError ? [] : monthKeys(from, to).map((month) => ({ month, label: monthLabel(month), balance: points.get(month) ?? null }))
+  }, [balanceQuery.data, dateError, from, to])
   const categoriesQuery = useCategoryReport(filters, !dateError)
 
   const trendData = useMemo(() => dateError ? [] : buildTrendData(monthlyQuery.data ?? [], from, to), [dateError, from, monthlyQuery.data, to])
@@ -76,6 +81,14 @@ export function ReportsPage() {
       </div>}
     </article>
 
-    <Alert tone="info">Net-worth reporting is not shown because the current data model does not expose account balance history. No values are inferred from transactions.</Alert>
+    <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="net-balance-heading">
+      <h3 id="net-balance-heading" className="font-semibold text-slate-950">Net balance over time</h3>
+      <p className="mt-1 text-sm text-slate-500">Total funds at a point in time, including opening balances as returned by the API. Cash flow is income minus expenses during a period. Transfers do not change total balance.</p>
+      <p className="mt-2 text-xs text-slate-500">Only reported monthly values are shown. Gaps mean no reported balance; values are never estimated for missing months or partial date ranges.</p>
+      {dateError ? <EmptyState title="Choose a valid date range" description="Correct the dates above to generate this report." /> : balanceQuery.isLoading ? <div role="status" aria-label="Loading net balance"><Skeleton className="mt-5 h-72" /></div> : balanceQuery.isError ? <div className="mt-5"><ErrorPanel message={`Could not load net balance. ${normalizeApiError(balanceQuery.error).message}`} retry={() => balanceQuery.refetch()} /></div> : !balanceQuery.data?.length ? <EmptyState title="No net balance history" description="The API returned no monthly balance points for this range. Opening balances alone may not produce history until transactions are recorded." /> : <>
+        <div className="mt-5 h-72" aria-hidden="true"><ResponsiveContainer width="100%" height="100%"><LineChart data={balanceData} margin={{ left: 8, right: 12 }}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="label" tick={{ fontSize: 12 }}/><YAxis width={68} tickFormatter={(value) => `¥${Number(value).toLocaleString()}`} tick={{ fontSize: 11 }}/><Tooltip formatter={(value) => value == null ? 'No data' : formatJPY(Number(value))}/><Line connectNulls={false} type="linear" dataKey="balance" name="Net balance" stroke="#4f46e5" strokeWidth={2}/></LineChart></ResponsiveContainer></div>
+        <div className="mt-5 overflow-x-auto"><table className="min-w-full text-sm"><caption className="sr-only">Net balance values shown in the chart</caption><thead><tr className="border-b border-slate-200"><th className="py-2 text-left">Month</th><th className="py-2 text-right">Net balance</th></tr></thead><tbody>{balanceData.map((point) => <tr key={point.month} className="border-b border-slate-100"><th scope="row" className="py-2 text-left font-medium">{point.label}</th><td className="py-2 text-right">{point.balance === null ? 'No data' : formatJPY(point.balance)}</td></tr>)}</tbody></table></div>
+      </>}
+    </article>
   </section>
 }

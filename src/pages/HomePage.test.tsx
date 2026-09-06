@@ -4,11 +4,15 @@ import { vi } from 'vitest'
 import { HomePage } from '@/pages/HomePage'
 
 const mocks = vi.hoisted(() => ({
+  balance: vi.fn(),
+  opening: vi.fn(),
   monthly: vi.fn(),
   categories: vi.fn(),
   transactions: vi.fn(),
 }))
 
+vi.mock('@/api/hooks/balance', () => ({ useCurrentBalance: () => mocks.balance() }))
+vi.mock('@/api/hooks/openingBalances', () => ({ useOpeningBalances: () => mocks.opening() }))
 vi.mock('@/api/hooks/reports', () => ({
   useMonthlyReport: (filters: unknown) => mocks.monthly(filters),
   useCategoryReport: (filters: unknown) => mocks.categories(filters),
@@ -26,12 +30,56 @@ function LocationProbe() { const location = useLocation(); return <output data-t
 describe('monthly dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.balance.mockReturnValue(ok({ cash_balance: -500, bank_balance: 500, total_balance: 0 }))
+    mocks.opening.mockReturnValue(ok([]))
     mocks.monthly.mockReturnValue(ok([
       { month: '2026-06-01', income: 300000, expense: 120000 },
       { month: '2026-07-01', income: 350000, expense: 100000 },
     ]))
     mocks.categories.mockReturnValue(ok([{ category_id: 'food', category_name: 'Food', total: 45000 }]))
     mocks.transactions.mockReturnValue(ok({ items: [{ id: 'tx-1', description: 'Groceries', amount: 5000, transaction_date: '2026-07-20' }], total: 1, page: 1, page_size: 5, total_pages: 1 }))
+  })
+
+  it('shows current signed balances and first-use setup independently of the selected month', () => {
+    render(<MemoryRouter initialEntries={['/?month=2026-07']}><HomePage /></MemoryRouter>)
+    expect(screen.getByRole('link', { name: 'Set up opening balances' })).toHaveAttribute('href', '/opening-balances')
+    expect(screen.getByText(/-￥500|-¥500/)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Dashboard month'), { target: { value: '2026-02' } })
+    expect(mocks.balance).toHaveBeenLastCalledWith()
+    expect(screen.getByRole('heading', { name: /Monthly cash flow/ })).toBeInTheDocument()
+  })
+
+  it('loads balances independently from monthly widgets', () => {
+    mocks.balance.mockReturnValue({ isLoading: true })
+    render(<MemoryRouter><HomePage /></MemoryRouter>)
+    expect(screen.getByText('Loading current balance…')).toBeInTheDocument()
+    expect(screen.getByText('Groceries')).toBeInTheDocument()
+  })
+
+  it('shows positive balances even when monthly summary fails and offers partial setup', () => {
+    mocks.balance.mockReturnValue(ok({ cash_balance: 1000, bank_balance: 2000, total_balance: 3000 }))
+    mocks.opening.mockReturnValue(ok([{ account_type: 'cash' }]))
+    mocks.monthly.mockReturnValue({ isError: true, error: new Error('offline'), refetch: vi.fn() })
+    render(<MemoryRouter><HomePage /></MemoryRouter>)
+    expect(screen.getByText(/￥3,000|¥3,000/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Complete opening balances' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Current balance' })).toBeInTheDocument()
+  })
+
+  it('keeps editing reachable without onboarding when both accounts are configured', () => {
+    mocks.opening.mockReturnValue(ok([{ account_type: 'cash' }, { account_type: 'bank' }]))
+    render(<MemoryRouter><HomePage /></MemoryRouter>)
+    expect(screen.queryByRole('link', { name: 'Set up opening balances' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Opening balances' })).toHaveAttribute('href', '/opening-balances')
+  })
+
+  it('offers a focused balance retry while healthy monthly widgets remain visible', () => {
+    const refetch = vi.fn()
+    mocks.balance.mockReturnValue({ isError: true, error: new Error('offline'), refetch })
+    render(<MemoryRouter><HomePage /></MemoryRouter>)
+    expect(screen.getByText('Groceries')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry current balance' }))
+    expect(refetch).toHaveBeenCalledOnce()
   })
 
   it('renders API insights and requests consistent selected-month boundaries', () => {

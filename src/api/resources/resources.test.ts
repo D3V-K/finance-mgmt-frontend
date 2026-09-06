@@ -19,6 +19,16 @@ describe('typed API resources', () => {
     expect(apiClient.get).toHaveBeenCalledWith('/transactions', { params: filters })
   })
 
+  it.each(['cash', 'bank'] as const)('persists %s in create and edit requests', async (account_type) => {
+    vi.mocked(apiClient.post).mockResolvedValue({ data: {} })
+    vi.mocked(apiClient.put).mockResolvedValue({ data: {} })
+    const payload = { account_type, amount: 100, category_id: 'category-1', transaction_date: '2026-01-01' }
+    await transactionsApi.create(payload)
+    await transactionsApi.update('transaction-1', { account_type })
+    expect(apiClient.post).toHaveBeenCalledWith('/transactions', payload)
+    expect(apiClient.put).toHaveBeenCalledWith('/transactions/transaction-1', { account_type })
+  })
+
   it('uses the backend category tree route', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: [] })
     await categoriesApi.tree()
@@ -40,6 +50,14 @@ describe('typed API resources', () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { categories: [{ id: 'category-1', children: [] }] } })
 
     await expect(categoriesApi.tree()).resolves.toEqual([{ id: 'category-1', children: [] }])
+  })
+
+  it('uses the existing net-worth endpoint for net balance with exact date filters', async () => {
+    const response = [{ month: '2026-01-01', net_worth: -1500 }]
+    vi.mocked(apiClient.get).mockResolvedValue({ data: response })
+    const filters = { from: '2026-01-01', to: '2026-01-31' }
+    await expect(reportsApi.netBalance(filters)).resolves.toEqual(response)
+    expect(apiClient.get).toHaveBeenCalledWith('/reports/net-worth', { params: filters })
   })
 
   it('uses the backend report route and date filters', async () => {
