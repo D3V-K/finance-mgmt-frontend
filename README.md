@@ -44,6 +44,25 @@ The frontend follows the sibling `finance-mgmt-backend-lite` contract: lowercase
 
 Backend limitations: transaction account filtering is not exposed, so account filters and account drill-down links are omitted. The current history endpoint returns an empty series for opening balances without transactions; the frontend explains that empty state and does not manufacture baseline points. These backend behaviors must change before opening-only history can be displayed.
 
+## Financial ledger rollout
+
+The canonical ledger (named accounts, purchases, card repayments, payday budgets, forecasts, investments and reconciliation) ships behind one build-time flag because the backend releases those contracts in stages and has no capability-discovery endpoint. `VITE_LEDGER_FEATURES` lists the released capabilities (`accounts`, `events`, `cutover`, `category-archive`, `cards`, `budgets`, `forecast`, `dashboard`, `investments`, `reconciliation`) or `all`:
+
+| Deployment | Value | Behavior |
+|---|---|---|
+| Legacy only | empty (default) | The Cash/Bank screens above; no new endpoint is ever requested. |
+| Partial | e.g. `accounts,events,category-archive` | Only listed features render and call the API. |
+| Full ledger | `all` | Every ledger screen is available. |
+
+`src/config/features.ts` enforces the flag at the resource layer, so a disabled feature cannot issue a request even if a component asks for one. A 401, 403 or network failure never switches the app to legacy writes.
+
+Data-layer conventions shared by every ledger screen:
+
+- **Types** live in `src/api/ledgerTypes.ts` and mirror the backend wire format, including uppercase `AccountKind`/`EventKind` values. `null` money means unknown and is never displayed or summed as zero.
+- **Query keys** (`src/api/queryKeys.ts`) include every parameter that changes the answer: account, as-of date, cycle, horizon and forecast scenario. Signing out, a failed token refresh or a different user clears and cancels the whole query cache (`src/auth/AuthContext.tsx`).
+- **Invalidation** goes through one matrix (`src/api/invalidation.ts`). For example, a purchase refreshes spending, budgets, card debt, forecasts and position; a card repayment refreshes bank, card, schedules and forecasts but never spending or budgets.
+- **Writes** send one idempotency key per logical write (`useIdempotencyKey`): retrying unchanged input reuses it, and edited input gets a new key. 409 responses are reported as `conflict` so screens refetch before retrying. Forms keep their input on failure and ignore double submits (`useSingleFlight`).
+
 ## Architecture
 
 ### Static Hosting (S3 + CloudFront)
@@ -262,6 +281,8 @@ API_PROXY_TARGET=http://localhost:8000
 VITE_USER_POOL_ID=ap-northeast-1_XXXXXXXXX
 VITE_USER_POOL_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxx
 VITE_AWS_REGION=ap-northeast-1
+# Optional: released ledger capabilities, or "all". Empty keeps the legacy experience.
+VITE_LEDGER_FEATURES=
 ```
 
 In production these are set as environment variables in the GitHub Actions deploy workflow and substituted into the build at CI time — they are never committed to the repository.

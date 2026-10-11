@@ -5,19 +5,38 @@ import {
   type AuthUser,
 } from 'aws-amplify/auth'
 import { Hub } from 'aws-amplify/utils'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type PropsWithChildren,
 } from 'react'
 import { AuthContext } from '@/auth/auth-context'
 
+const identityOf = (user: AuthUser | null) => user ? user.userId || user.username : null
+
 export function AuthProvider({ children }: PropsWithChildren) {
   const e2eMode = import.meta.env.MODE === 'e2e'
-  const [user, setUser] = useState<AuthUser | null>(null)
+  const queryClient = useQueryClient()
+  const [user, setCurrentUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(!e2eMode)
+  const identity = useRef<string | null>(null)
+
+  // Financial data is cached per signed-in identity. Any identity change (sign-out,
+  // expired refresh token or a different account) drops in-flight requests and every
+  // cached response before the next user's screens can render.
+  const setUser = useCallback((next: AuthUser | null) => {
+    const nextIdentity = identityOf(next)
+    if (identity.current !== nextIdentity) {
+      void queryClient.cancelQueries()
+      queryClient.clear()
+      identity.current = nextIdentity
+    }
+    setCurrentUser(next)
+  }, [queryClient])
 
   useEffect(() => {
     if (e2eMode) return
@@ -37,7 +56,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return () => {
       active = false
     }
-  }, [e2eMode])
+  }, [e2eMode, setUser])
 
   useEffect(() => {
     if (e2eMode) return
@@ -48,7 +67,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     })
 
     return unsubscribe
-  }, [e2eMode])
+  }, [e2eMode, setUser])
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (e2eMode) {
@@ -60,7 +79,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       throw new Error('Additional sign-in steps are required. Contact support.')
     }
     setUser(await getCurrentUser())
-  }, [e2eMode])
+  }, [e2eMode, setUser])
 
   const signOut = useCallback(async () => {
     if (e2eMode) {
@@ -72,7 +91,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     } finally {
       setUser(null)
     }
-  }, [e2eMode])
+  }, [e2eMode, setUser])
 
   const value = useMemo(
     () => ({ user, loading, isAuthenticated: user !== null, signIn, signOut }),

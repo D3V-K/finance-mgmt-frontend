@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { transactionsApi } from '@/api/resources/transactions'
-import { reportKeys } from '@/api/hooks/reports'
+import { invalidateFor } from '@/api/invalidation'
 import type { TransactionCreateDto, TransactionFilter, TransactionUpdateDto, UUID } from '@/api/types'
 
 export const transactionKeys = {
@@ -21,10 +21,7 @@ export function useTransaction(id: UUID) {
 
 function useInvalidateTransactionData() {
   const client = useQueryClient()
-  return () => Promise.all([
-    client.invalidateQueries({ queryKey: transactionKeys.all }),
-    client.invalidateQueries({ queryKey: reportKeys.all }),
-  ])
+  return () => invalidateFor(client, 'legacy-transaction')
 }
 
 export function useCreateTransaction() {

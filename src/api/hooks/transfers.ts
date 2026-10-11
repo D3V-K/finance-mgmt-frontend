@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { invalidateFor } from '@/api/invalidation'
 import { transfersApi } from '@/api/resources/transfers'
 import type { TransferCreateDto, TransferFilter, UUID } from '@/api/types'
 
@@ -17,11 +18,7 @@ export function useTransfer(id: UUID) {
 }
 function useInvalidateTransferData() {
   const client = useQueryClient()
-  return () => Promise.all([
-    client.invalidateQueries({ queryKey: transferKeys.all }),
-    client.invalidateQueries({ queryKey: ['reports', 'balance'] }),
-    client.invalidateQueries({ queryKey: ['reports', 'net-worth'] }),
-  ])
+  return () => invalidateFor(client, 'legacy-transfer')
 }
 export function useCreateTransfer() {
   const invalidate = useInvalidateTransferData()
