@@ -63,6 +63,12 @@ Data-layer conventions shared by every ledger screen:
 - **Invalidation** goes through one matrix (`src/api/invalidation.ts`). For example, a purchase refreshes spending, budgets, card debt, forecasts and position; a card repayment refreshes bank, card, schedules and forecasts but never spending or budgets.
 - **Writes** send one idempotency key per logical write (`useIdempotencyKey`): retrying unchanged input reuses it, and edited input gets a new key. 409 responses are reported as `conflict` so screens refetch before retrying. Forms keep their input on failure and ignore double submits (`useSingleFlight`).
 
+### Named accounts (`accounts`)
+
+`/accounts` lists bank, cash, credit-card and brokerage-cash accounts grouped by kind, each with its own opening balance entered as the balance at the start of a date. An account without an opening shows "Opening balance needed", never ¥0; zero is a real, savable amount. Card balances are shown and entered as a positive "Amount owed" or "Credit balance"; the adapter converts them to the server's signed convention (negative when owed). Corrections explain that later balances are recalculated and earlier entries are not replayed, and list earlier baselines. Archived accounts keep their history, can be shown for review and cannot receive new entries. The default entry account is a server-side preference. The legacy `/opening-balances` page keeps editing the original Cash/Bank baseline.
+
+Playwright runs two projects: `chromium` against a legacy-only build and `ledger` against a build with `VITE_LEDGER_FEATURES=all`, backed by the in-memory mock in `e2e/ledgerApi.ts`.
+
 ## Architecture
 
 ### Static Hosting (S3 + CloudFront)

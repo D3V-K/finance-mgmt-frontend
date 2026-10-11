@@ -12,7 +12,12 @@ export function isValidISODate(value: string) {
 }
 
 export function tokyoToday(now = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now)
+  return zonedToday('Asia/Tokyo', now)
+}
+
+/** Calendar date in the user's configured timezone; never UTC-truncated. */
+export function zonedToday(timeZone: string, now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now)
   const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)!.value
   return `${part('year')}-${part('month')}-${part('day')}`
 }

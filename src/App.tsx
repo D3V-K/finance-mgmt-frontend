@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import { ProtectedRoute, PublicOnlyRoute } from '@/auth/routes'
 import { AppShell } from '@/components/layout/AppShell'
+import { FeatureRoute } from '@/components/layout/FeatureGate'
 import { Spinner } from '@/components/ui/Feedback'
 
 const HomePage = lazy(() => import('@/pages/HomePage').then((module) => ({ default: module.HomePage })))
@@ -13,6 +14,7 @@ const ReportsPage = lazy(() => import('@/pages/ReportsPage').then((module) => ({
 
 const TransfersPage = lazy(() => import('@/pages/TransfersPage').then((module) => ({ default: module.TransfersPage })))
 const OpeningBalancesPage = lazy(() => import('@/pages/OpeningBalancesPage').then((module) => ({ default: module.OpeningBalancesPage })))
+const AccountsPage = lazy(() => import('@/pages/AccountsPage').then((module) => ({ default: module.AccountsPage })))
 
 export default function App() {
   return (
@@ -27,6 +29,7 @@ export default function App() {
             <Route path="transactions" element={<TransactionsPage />} />
             <Route path="transfers" element={<TransfersPage />} />
             <Route path="opening-balances" element={<OpeningBalancesPage />} />
+            <Route path="accounts" element={<FeatureRoute feature="accounts"><AccountsPage /></FeatureRoute>} />
             <Route path="categories" element={<CategoriesPage />} />
             <Route path="reports" element={<ReportsPage />} />
             <Route path="*" element={<NotFoundPage />} />
