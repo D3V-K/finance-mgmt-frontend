@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/Button'
 import { Dialog } from '@/components/ui/Dialog'
 import { Alert, EmptyState, Skeleton } from '@/components/ui/Feedback'
 import { Input, Select } from '@/components/ui/FormControls'
+import { isFeatureEnabled } from '@/config/features'
+import { MovementsPage } from '@/pages/MovementsPage'
 import { formatDate, formatJPY } from '@/utils/format'
 import { isValidISODate, tokyoToday } from '@/utils/reporting'
 
@@ -49,6 +51,12 @@ function TransferForm({ onDone, onPending }: { onDone: () => void; onPending: (p
 }
 
 export function TransfersPage() {
+  const [params] = useSearchParams()
+  if (!isFeatureEnabled('events')) return <LegacyTransfersPage />
+  return params.get('view') === 'earlier' ? <LegacyTransfersPage readOnly /> : <MovementsPage />
+}
+
+function LegacyTransfersPage({ readOnly = false }: { readOnly?: boolean }) {
   const [params, setParams] = useSearchParams()
   const parsedPage = Number(params.get('page'))
   const page = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1
@@ -76,15 +84,15 @@ export function TransfersPage() {
   const filtered = params.has('from') || params.has('to')
   const response = query.data
   return <section aria-labelledby="transfers-heading" className="space-y-6">
-    <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 id="transfers-heading" className="text-2xl font-bold tracking-tight">Transfers</h2><p className="mt-1 max-w-2xl text-sm text-slate-600">Move money between your Bank and Cash accounts. Transfers do not affect income, expenses, net cash flow, or total balance.</p></div><Button onClick={() => setCreating(true)}>New transfer</Button></div>
+    <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 id="transfers-heading" className="text-2xl font-bold tracking-tight">{readOnly ? 'Earlier transfers' : 'Transfers'}</h2><p className="mt-1 max-w-2xl text-sm text-slate-600">{readOnly ? 'Cash/Bank transfers from before purchase-date tracking, kept exactly as recorded.' : 'Move money between your Bank and Cash accounts. Transfers do not affect income, expenses, net cash flow, or total balance.'}</p></div>{readOnly ? <Link to="/transfers" className="text-sm font-semibold text-indigo-700 underline">Back to current transfers</Link> : <Button onClick={() => setCreating(true)}>New transfer</Button>}</div>
     {feedback && <Alert tone="success">{feedback}</Alert>}
     <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
       <Input id="transfer-from" label="From" type="date" value={params.get('from') ?? ''} onChange={(event) => updateFilter('from', event.target.value)}/>
       <Input id="transfer-to" label="To" type="date" value={params.get('to') ?? ''} onChange={(event) => updateFilter('to', event.target.value)}/>
-      {filtered && <Button variant="ghost" onClick={() => setParams({})}>Clear filters</Button>}
+      {filtered && <Button variant="ghost" onClick={() => setParams(readOnly ? { view: 'earlier' } : {})}>Clear filters</Button>}
     </div>
     {rangeError ? <Alert>{rangeError}</Alert> : query.isLoading ? <div aria-label="Loading transfers"><Skeleton className="h-72 w-full"/></div> : query.isError ? <div className="space-y-4"><Alert>Could not load transfers. {normalizeApiError(query.error).message}</Alert><Button variant="secondary" onClick={() => query.refetch()}>Try again</Button></div> : !response?.items.length ? <EmptyState title={filtered ? 'No matching transfers' : 'No transfers yet'} description={filtered ? 'Try changing or clearing your filters.' : 'Record a withdrawal or deposit between your accounts.'}/> : <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="min-w-full divide-y divide-slate-200"><caption className="sr-only">Transfer history</caption><thead className="bg-slate-50"><tr>{['Date', 'Direction', 'Description', 'Amount', 'Actions'].map((heading) => <th key={heading} scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{heading}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{response.items.map((transfer) => <tr key={transfer.id}>
-      <td className="whitespace-nowrap px-4 py-3 text-sm">{formatDate(transfer.transfer_date)}</td><td className="px-4 py-3 text-sm">{directions[transfer.from_account]}</td><td className="max-w-xs break-words px-4 py-3 text-sm">{transfer.description || '—'}</td><td className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold">{formatJPY(transfer.amount)}</td><td className="px-4 py-3"><Button variant="ghost" onClick={() => { setDeleteError(''); setDeleting(transfer) }}>Delete</Button></td>
+      <td className="whitespace-nowrap px-4 py-3 text-sm">{formatDate(transfer.transfer_date)}</td><td className="px-4 py-3 text-sm">{directions[transfer.from_account]}</td><td className="max-w-xs break-words px-4 py-3 text-sm">{transfer.description || '—'}</td><td className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold">{formatJPY(transfer.amount)}</td><td className="px-4 py-3">{readOnly ? <span className="text-xs text-slate-500">Kept as recorded</span> : <Button variant="ghost" onClick={() => { setDeleteError(''); setDeleting(transfer) }}>Delete</Button>}</td>
     </tr>)}</tbody></table></div>}
     {((response?.total_pages ?? 0) > 1 || page > 1) && <nav aria-label="Transfer pages" className="flex flex-wrap items-center justify-between gap-4"><p className="text-sm text-slate-600">Page {page} of {Math.max(response?.total_pages ?? 1, page)} · {response?.total ?? 0} transfers</p><div className="flex gap-2"><Button variant="secondary" disabled={page <= 1 || query.isFetching} onClick={() => changePage(page - 1)}>Previous</Button><Button variant="secondary" disabled={page >= (response?.total_pages ?? 1) || query.isFetching} onClick={() => changePage(page + 1)}>Next</Button></div></nav>}
     <Dialog open={creating} title="Create transfer" onClose={() => { if (!creatingPending) setCreating(false) }}>{creating && <TransferForm onPending={setCreatingPending} onDone={() => { setCreating(false); setFeedback('Transfer created.') }}/>}</Dialog>

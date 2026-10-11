@@ -75,3 +75,13 @@ describe('TransactionsPage', () => {
     await waitFor(() => expect(mocks.remove).toHaveBeenCalledWith('txn-1'))
   })
 })
+
+it('defaults a legacy transaction to the Tokyo calendar date rather than the UTC date', () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-09-10T15:30:00Z'))
+  try {
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'New transaction' }))
+    expect(screen.getByLabelText('Date')).toHaveValue('2026-09-11')
+  } finally { vi.useRealTimers() }
+})

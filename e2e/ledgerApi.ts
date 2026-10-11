@@ -113,6 +113,31 @@ on('POST', /^\/ledger-cutovers\/confirm$/, (route, { state, body }) => {
 })
 on('GET', /^\/categories(\/tree)?$/, (route, { state, path }) => json(route, path.endsWith('tree') ? state.categories : { items: state.categories, total: state.categories.length, page: 1, page_size: 100, total_pages: 1 }))
 
+const LIQUID = ['CASH', 'BANK', 'BROKERAGE_CASH']
+on('POST', /^\/financial-events$/, (route, { state, body }) => {
+  const existing = state.events.find((event) => body.idempotency_key && event.idempotency_key === body.idempotency_key)
+  if (existing) return json(route, existing, 201)
+  const kind = String(body.kind)
+  const amount = Number(body.amount)
+  const occurred = (body.occurred_on as string | null) ?? state.today
+  const effective = (body.effective_date as string | null) ?? occurred
+  const source = state.accounts.find((account) => account.id === body.account_id)!
+  if (kind === 'CARD_REPAYMENT' && !LIQUID.includes(source.kind)) return json(route, { detail: 'Repayment must move liquid funds to a card' }, 422)
+  const postings: Posting[] = [{ id: nextId(state, 'posting'), account_id: source.id, delta: kind === 'INCOME' || kind === 'REFUND' ? amount : -amount, effective_date: effective }]
+  if (body.destination_account_id) postings.push({ id: nextId(state, 'posting'), account_id: String(body.destination_account_id), delta: amount, effective_date: effective })
+  const event: Event = { id: nextId(state, 'event'), user_id: 'e2e-user', kind, amount, currency: 'JPY', category_id: (body.category_id as string | undefined) ?? null, description: (body.description as string | null) ?? null, occurred_on: occurred, date_basis: 'known', recorded_at: `${state.today}T12:00:${String(state.counter).padStart(2, '0')}`, original_event_id: (body.original_event_id as string | undefined) ?? null, reverses_event_id: null, replaces_event_id: null, is_reversal: false, postings, idempotency_key: body.idempotency_key as string }
+  state.events.push(event)
+  return json(route, event, 201)
+})
+on('GET', /^\/financial-events$/, (route, { state, query }) => {
+  const items = state.events.filter((event) => (!query.get('kind') || event.kind === query.get('kind')) && (!query.get('account_id') || event.postings.some((posting) => posting.account_id === query.get('account_id')))).slice().reverse()
+  return json(route, { items, total: items.length, page: 1, page_size: 20 })
+})
+on('GET', /^\/reports\/canonical-(monthly|by-category)$/, (route, { state, path }) => {
+  const spending = state.events.filter((event) => event.kind === 'EXPENSE').reduce((sum, event) => sum + event.amount, 0)
+  return json(route, path.endsWith('monthly') ? [{ month: '2026-09-01', income: 0, gross_spending: spending, refunds: 0, net_spending: spending, date_basis: 'known_only' }] : [])
+})
+
 // Legacy screens still render on a full-ledger deployment.
 on('GET', /^\/opening-balances$/, (route) => json(route, []))
 on('GET', /^\/reports\/balance$/, (route) => json(route, { cash_balance: 0, bank_balance: 0, total_balance: 0 }))

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -13,7 +13,10 @@ import { Button } from '@/components/ui/Button'
 import { Dialog } from '@/components/ui/Dialog'
 import { Alert, EmptyState, Skeleton } from '@/components/ui/Feedback'
 import { Input, Select } from '@/components/ui/FormControls'
+import { isFeatureEnabled } from '@/config/features'
+import { ActivityPage } from '@/pages/ActivityPage'
 import { formatDate, formatJPY } from '@/utils/format'
+import { tokyoToday } from '@/utils/reporting'
 
 const PAGE_SIZE = 20
 const formSchema = z.object({
@@ -32,7 +35,7 @@ function TransactionForm({ transaction, categories, onDone }: { transaction: Tra
   const [submitError, setSubmitError] = useState('')
   const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: { account_type: transaction?.account_type, amount: transaction?.amount ?? 0, transaction_date: transaction?.transaction_date ?? new Date().toISOString().slice(0, 10), category_id: transaction?.category_id ?? '', description: transaction?.description ?? '' },
+    defaultValues: { account_type: transaction?.account_type, amount: transaction?.amount ?? 0, transaction_date: transaction?.transaction_date ?? tokyoToday(), category_id: transaction?.category_id ?? '', description: transaction?.description ?? '' },
   })
   const submit = async (values: FormValues) => {
     setSubmitError('')
@@ -54,7 +57,14 @@ function TransactionForm({ transaction, categories, onDone }: { transaction: Tra
   </form>
 }
 
+/** Ledger deployments record canonical entries; legacy deployments keep the original Cash/Bank screen. */
 export function TransactionsPage() {
+  const [params] = useSearchParams()
+  if (!isFeatureEnabled('events')) return <LegacyTransactionsPage />
+  return params.get('view') === 'earlier' ? <LegacyTransactionsPage readOnly /> : <ActivityPage />
+}
+
+function LegacyTransactionsPage({ readOnly = false }: { readOnly?: boolean }) {
   const [params, setParams] = useSearchParams()
   const page = Math.max(1, Number(params.get('page')) || 1)
   const filters: TransactionFilter = useMemo(() => ({
@@ -72,7 +82,7 @@ export function TransactionsPage() {
   const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data])
   const categoryMap = useMemo(() => new Map(categories.map((category) => [category.id, category])), [categories])
   const updateFilter = (key: string, value: string) => setParams((current) => { const next = new URLSearchParams(current); if (value) next.set(key, value); else next.delete(key); if (key === 'type') next.delete('category_id'); next.delete('page'); return next }, { replace: true })
-  const clearFilters = () => setParams({}, { replace: true })
+  const clearFilters = () => setParams(readOnly ? { view: 'earlier' } : {}, { replace: true })
   const confirmDelete = async () => {
     if (!deleting || remove.isPending) return
     setDeleteError('')
@@ -86,9 +96,9 @@ export function TransactionsPage() {
   const transactions = response?.items ?? []
   const hasFilters = ['from', 'to', 'category_id', 'type', 'search'].some((key) => params.has(key))
   return <section aria-labelledby="transactions-heading" className="space-y-6">
-    <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 id="transactions-heading" className="text-2xl font-bold tracking-tight">Transactions</h2><p className="mt-1 text-sm text-slate-600">Review and manage money moving in and out.</p></div><Button onClick={() => setEditing(null)} disabled={!categories.length}>New transaction</Button></div>
+    <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 id="transactions-heading" className="text-2xl font-bold tracking-tight">{readOnly ? 'Earlier records' : 'Transactions'}</h2><p className="mt-1 text-sm text-slate-600">{readOnly ? 'Your Cash/Bank records from before purchase-date tracking, kept exactly as recorded. Dates are the dates money moved, not necessarily purchase dates.' : 'Review and manage money moving in and out.'}</p></div>{readOnly ? <Link to="/transactions" className="text-sm font-semibold text-indigo-700 underline">Back to current entries</Link> : <Button onClick={() => setEditing(null)} disabled={!categories.length}>New transaction</Button>}</div>
     {feedback && <Alert tone="success">{feedback}</Alert>}
-    {!categories.length && <Alert tone="info">Create a category before adding a transaction.</Alert>}
+    {!categories.length && !readOnly && <Alert tone="info">Create a category before adding a transaction.</Alert>}
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
       <Input id="filter-from" label="From" type="date" value={params.get('from') ?? ''} onChange={(event) => updateFilter('from', event.target.value)} />
       <Input id="filter-to" label="To" type="date" value={params.get('to') ?? ''} onChange={(event) => updateFilter('to', event.target.value)} />
@@ -97,7 +107,7 @@ export function TransactionsPage() {
       <Input id="filter-search" label="Description" type="search" placeholder="Search transactions" value={params.get('search') ?? ''} onChange={(event) => updateFilter('search', event.target.value)} />
     </div>{hasFilters && <div className="mt-3 flex justify-end"><Button variant="ghost" onClick={clearFilters}>Clear filters</Button></div>}</div>
     <p className="text-sm text-slate-500">Account filtering is not yet supported by the server.</p>
-    {!transactions.length ? <EmptyState title={hasFilters ? 'No matching transactions' : 'No transactions yet'} description={hasFilters ? 'Try changing or clearing your filters.' : 'Add your first income or expense transaction.'} action={hasFilters ? <Button variant="secondary" onClick={clearFilters}>Clear filters</Button> : (categories.length ? <Button onClick={() => setEditing(null)}>Add transaction</Button> : undefined)} /> : <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="overflow-x-auto"><table className="min-w-full divide-y divide-slate-200"><thead className="bg-slate-50"><tr>{['Date', 'Type', 'Account', 'Category', 'Description', 'Amount', 'Actions'].map((heading) => <th key={heading} scope="col" className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 ${heading === 'Amount' ? 'text-right' : ''}`}>{heading}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{transactions.map((transaction) => { const category = categoryMap.get(transaction.category_id); return <tr key={transaction.id}><td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">{formatDate(transaction.transaction_date)}</td><td className="px-4 py-3 text-sm">{category?.type === 'income' ? 'Income' : 'Expense'}</td><td className="px-4 py-3 text-sm">{transaction.account_type === 'cash' ? 'Cash' : transaction.account_type === 'bank' ? 'Bank' : 'Unknown account'}</td><td className="px-4 py-3">{category ? <CategoryBadge category={category}/> : <span className="text-sm text-slate-500">Unknown</span>}</td><td className="max-w-xs truncate px-4 py-3 text-sm text-slate-700">{transaction.description || <span className="text-slate-400">—</span>}</td><td className={`whitespace-nowrap px-4 py-3 text-right text-sm font-semibold ${category?.type === 'income' ? 'text-emerald-700' : 'text-slate-900'}`}>{category?.type === 'income' ? '+' : '−'}{formatJPY(transaction.amount)}</td><td className="whitespace-nowrap px-4 py-3"><div className="flex gap-1"><Button variant="ghost" className="px-3" onClick={() => setEditing(transaction)}>Edit</Button><Button variant="ghost" className="px-3 text-red-700 hover:bg-red-50" onClick={() => setDeleting(transaction)}>Delete</Button></div></td></tr> })}</tbody></table></div></div>}
+    {!transactions.length ? <EmptyState title={hasFilters ? 'No matching transactions' : readOnly ? 'No earlier records' : 'No transactions yet'} description={hasFilters ? 'Try changing or clearing your filters.' : readOnly ? 'Nothing was recorded before purchase-date tracking.' : 'Add your first income or expense transaction.'} action={hasFilters ? <Button variant="secondary" onClick={clearFilters}>Clear filters</Button> : (categories.length && !readOnly ? <Button onClick={() => setEditing(null)}>Add transaction</Button> : undefined)} /> : <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="overflow-x-auto"><table className="min-w-full divide-y divide-slate-200"><thead className="bg-slate-50"><tr>{['Date', 'Type', 'Account', 'Category', 'Description', 'Amount', readOnly ? 'Provenance' : 'Actions'].map((heading) => <th key={heading} scope="col" className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 ${heading === 'Amount' ? 'text-right' : ''}`}>{heading}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{transactions.map((transaction) => { const category = categoryMap.get(transaction.category_id); return <tr key={transaction.id}><td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">{formatDate(transaction.transaction_date)}</td><td className="px-4 py-3 text-sm">{category?.type === 'income' ? 'Income' : 'Expense'}</td><td className="px-4 py-3 text-sm">{transaction.account_type === 'cash' ? 'Cash' : transaction.account_type === 'bank' ? 'Bank' : 'Unknown account'}</td><td className="px-4 py-3">{category ? <CategoryBadge category={category}/> : <span className="text-sm text-slate-500">Unknown</span>}</td><td className="max-w-xs truncate px-4 py-3 text-sm text-slate-700">{transaction.description || <span className="text-slate-400">—</span>}</td><td className={`whitespace-nowrap px-4 py-3 text-right text-sm font-semibold ${category?.type === 'income' ? 'text-emerald-700' : 'text-slate-900'}`}>{category?.type === 'income' ? '+' : '−'}{formatJPY(transaction.amount)}</td><td className="whitespace-nowrap px-4 py-3">{readOnly ? <span className="text-xs text-slate-500">Recorded on payment date</span> : <div className="flex gap-1"><Button variant="ghost" className="px-3" onClick={() => setEditing(transaction)}>Edit</Button><Button variant="ghost" className="px-3 text-red-700 hover:bg-red-50" onClick={() => setDeleting(transaction)}>Delete</Button></div>}</td></tr> })}</tbody></table></div></div>}
     {(response?.total_pages ?? 0) > 1 && <nav aria-label="Transaction pages" className="flex items-center justify-between gap-4"><p className="text-sm text-slate-600">Page {response?.page} of {response?.total_pages} · {response?.total} transactions</p><div className="flex gap-2"><Button variant="secondary" disabled={page <= 1} onClick={() => setParams((current) => { const next = new URLSearchParams(current); next.set('page', String(page - 1)); return next })}>Previous</Button><Button variant="secondary" disabled={page >= (response?.total_pages ?? 1)} onClick={() => setParams((current) => { const next = new URLSearchParams(current); next.set('page', String(page + 1)); return next })}>Next</Button></div></nav>}
     <Dialog open={editing !== undefined} title={editing ? 'Edit transaction' : 'Create transaction'} onClose={() => closeForm()}>{editing !== undefined && <TransactionForm key={editing?.id ?? 'new'} transaction={editing} categories={categories} onDone={closeForm}/>}</Dialog>
     <Dialog open={!!deleting} title="Delete transaction?" onClose={() => { if (!remove.isPending) { setDeleting(null); setDeleteError('') } }}><div className="space-y-4">{deleteError && <Alert>{deleteError}</Alert>}<p className="text-sm text-slate-600">Delete <strong>{deleting?.description || 'this transaction'}</strong> for {deleting ? formatJPY(deleting.amount) : ''}? This cannot be undone.</p><div className="flex justify-end gap-3"><Button variant="secondary" disabled={remove.isPending} onClick={() => setDeleting(null)}>Cancel</Button><Button variant="danger" loading={remove.isPending} onClick={confirmDelete}>Delete transaction</Button></div></div></Dialog>

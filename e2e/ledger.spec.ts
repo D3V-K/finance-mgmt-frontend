@@ -67,3 +67,43 @@ test('migrates payment-date history to purchase-date tracking without rewriting 
   expect(state.events[0]).toMatchObject({ occurred_on: null, date_basis: 'legacy_recorded_date' })
   expect(state.openings['acct-card'].amount).toBe(-20000)
 })
+
+test('records a card purchase immediately and repays it later without a second expense', async ({ page }) => {
+  const state = await mockLedgerApi(page)
+  state.accounts.push(
+    { id: 'acct-bank', user_id: 'e2e-user', name: 'Everyday Bank', kind: 'BANK', currency: 'JPY', archived_at: null, created_at: '', updated_at: '' },
+    { id: 'acct-card', user_id: 'e2e-user', name: 'Rewards Card', kind: 'CREDIT_CARD', currency: 'JPY', archived_at: null, created_at: '', updated_at: '' },
+  )
+  state.openings['acct-bank'] = { amount: 100000, as_of_date: '2026-09-01', revision: 1 }
+  state.openings['acct-card'] = { amount: 0, as_of_date: '2026-09-01', revision: 1 }
+  state.settings.default_account_id = 'acct-card'
+  await signIn(page)
+  await page.getByRole('link', { name: 'Transactions' }).first().click()
+  await page.getByRole('button', { name: 'Record purchase' }).click()
+  let dialog = page.getByRole('dialog', { name: 'Record a purchase' })
+  await dialog.getByLabel('Amount (JPY)').fill('6000')
+  await dialog.getByLabel('Category').selectOption('cat-groceries')
+  await expect(dialog.getByText(/Your bank balance doesn't change/)).toBeVisible()
+  await dialog.getByRole('button', { name: 'Record purchase' }).click()
+  await expect(page.getByText('Purchase recorded.')).toBeVisible()
+
+  await page.getByRole('link', { name: 'Accounts' }).first().click()
+  await expect(page.getByText('¥100,000')).toBeVisible()
+  await expect(page.getByText('Amount owed ¥6,000')).toBeVisible()
+
+  await page.getByRole('link', { name: 'Transfers' }).first().click()
+  await page.getByRole('tab', { name: 'Card repayments' }).click()
+  await page.getByRole('button', { name: 'New card repayment' }).click()
+  dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Amount (JPY)').fill('6000')
+  await dialog.getByLabel('Paid from').selectOption('acct-bank')
+  await dialog.getByLabel('Card').selectOption('acct-card')
+  await dialog.getByLabel('Payment date').fill('2026-09-10')
+  await dialog.getByRole('button', { name: 'Record card repayment' }).click()
+  await expect(page.getByRole('table', { name: 'Card repayments' })).toContainText('Everyday Bank → Rewards Card')
+
+  await page.getByRole('link', { name: 'Accounts' }).first().click()
+  await expect(page.getByText('¥94,000')).toBeVisible()
+  await expect(page.getByText('Amount owed ¥0')).toBeVisible()
+  expect(state.events.filter((event) => event.kind === 'EXPENSE')).toHaveLength(1)
+})
