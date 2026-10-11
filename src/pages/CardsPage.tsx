@@ -17,6 +17,13 @@ import { formatDate, formatJPY } from '@/utils/format'
 import { isValidISODate } from '@/utils/reporting'
 
 const WHOLE = /^\d+$/
+const DAYS_OF_MONTH = Array.from({ length: 31 }, (_, index) => String(index + 1))
+const ordinal = (value: string) => {
+  const n = Number(value)
+  const suffix = n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th'
+  return n === 31 ? '31st / last day of month' : `${n}${suffix}`
+}
+const dayLabel = (day: number) => (day === 31 ? 'the last day of the month' : `the ${ordinal(String(day))}`)
 const positiveYen = (value: string) => WHOLE.test(value) && Number(value) > 0 && Number.isSafeInteger(Number(value))
 
 function message(error: unknown) {
@@ -57,7 +64,7 @@ function CardSummary({ card, options, banks, detail = false }: { card: Account; 
     </div>
     {settings.isLoading ? null : settings.isError ? <Alert>Card settings are unavailable. {normalizeApiError(settings.error).message}</Alert>
       : !settings.data ? <Alert tone="info">Choose which bank pays this card so upcoming withdrawals appear in the right account’s forecast.{!detail && <> <Link to={`/cards/${card.id}`} className="font-semibold underline">Set the settlement bank</Link></>}</Alert>
-      : <p className="text-sm text-slate-600">Paid from <strong>{bank?.name ?? 'an archived bank'}</strong> · statement closes on day {settings.data.closing_day}, payment on day {settings.data.payment_day}</p>}
+      : <p className="text-sm text-slate-600">Paid from <strong>{bank?.name ?? 'an archived bank'}</strong> · statement closes on {dayLabel(settings.data.closing_day)}, payment on {dayLabel(settings.data.payment_day)}</p>}
   </article>
 }
 
@@ -72,7 +79,7 @@ function SettingsForm({ card, banks }: { card: Account; banks: Account[] }) {
   const day = (value: string) => WHOLE.test(value) && Number(value) >= 1 && Number(value) <= 31
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    if (!current.bank || !day(current.closing) || !day(current.payment)) { setFeedback({ text: 'Choose a settlement bank and enter closing and payment days between 1 and 31.', error: true }); return }
+    if (!current.bank || !day(current.closing) || !day(current.payment)) { setFeedback({ text: 'Choose a settlement bank, a statement closing day and a payment day.', error: true }); return }
     void once(async () => {
       setFeedback(null)
       try { await save.mutateAsync({ cardId: card.id, payload: { settlement_account_id: current.bank, closing_day: Number(current.closing), payment_day: Number(current.payment) } }); setFeedback({ text: 'Card settings saved.', error: false }); setValues(null) }
@@ -86,10 +93,10 @@ function SettingsForm({ card, banks }: { card: Account; banks: Account[] }) {
     {!banks.length && <Alert tone="info">Add a bank account first. <Link to="/accounts" className="underline">Go to Accounts</Link></Alert>}
     <div className="grid gap-4 sm:grid-cols-3">
       <Select id="settlement-bank" label="Settlement bank" value={current.bank} onChange={set('bank')}><option value="">Select a bank</option>{banks.map((bank) => <option key={bank.id} value={bank.id}>{bank.name}</option>)}</Select>
-      <Input id="closing-day" label="Statement closing day" inputMode="numeric" value={current.closing} onChange={set('closing')} />
-      <Input id="payment-day" label="Payment day" inputMode="numeric" value={current.payment} onChange={set('payment')} />
+      <Select id="closing-day" label="Statement closing day (each month)" value={current.closing} onChange={set('closing')}><option value="">Select a day</option>{DAYS_OF_MONTH.map((d) => <option key={d} value={d}>{ordinal(d)}</option>)}</Select>
+      <Select id="payment-day" label="Payment day (each month)" value={current.payment} onChange={set('payment')}><option value="">Select a day</option>{DAYS_OF_MONTH.map((d) => <option key={d} value={d}>{ordinal(d)}</option>)}</Select>
     </div>
-    <p className="text-xs text-slate-500">Days late in the month move to the last day of shorter months. Dates are estimates until you confirm a statement.</p>
+    <p className="text-xs text-slate-500">These repeat every month, e.g. closes on the 15th and is paid on the 10th. For a card that closes or is paid at month-end, choose “31st / last day of month”. Each payment’s due date and the statement closing date are still entered as actual dates.</p>
     <Button type="submit" variant="secondary" loading={save.isPending}>Save settings</Button>
   </form>
 }
