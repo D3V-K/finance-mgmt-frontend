@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { isFeatureEnabled, type LedgerFeature } from '@/config/features'
 import { useUiStore } from '@/store/uiStore'
 
-type IconName = 'dashboard' | 'transactions' | 'categories' | 'reports' | 'accounts' | 'cards'
+type IconName = 'dashboard' | 'transactions' | 'categories' | 'reports' | 'accounts' | 'cards' | 'budget' | 'savings'
 // Ledger entries appear only once their backend contract is released on this deployment.
 const allPaths: Array<{ to: string; label: string; icon: IconName; feature?: LedgerFeature; hidden?: boolean }> = [
   { to: '/', label: 'Dashboard', icon: 'dashboard' },
@@ -13,6 +13,8 @@ const allPaths: Array<{ to: string; label: string; icon: IconName; feature?: Led
   { to: '/transfers', label: 'Transfers', icon: 'transactions' },
   { to: '/accounts', label: 'Accounts', icon: 'accounts', feature: 'accounts' },
   { to: '/cards', label: 'Cards', icon: 'cards', feature: 'cards' },
+  { to: '/budget', label: 'Budget', icon: 'budget', feature: 'budgets' },
+  { to: '/savings', label: 'Savings', icon: 'savings', feature: 'budgets' },
   { to: '/opening-balances', label: 'Opening balances', icon: 'dashboard' },
   { to: '/setup/migration', label: 'Migration setup', icon: 'accounts', feature: 'cutover', hidden: true },
   { to: '/categories', label: 'Categories', icon: 'categories' },
@@ -35,6 +37,8 @@ function Icon({ name }: { name: IconName }) {
     categories: <><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H10l2 2h5.5A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5z"/></>,
     reports: <><path d="M4 20V10m5 10V4m6 16v-7m5 7V7"/></>,
     accounts: <><path d="M3 10 12 4l9 6M5 10v8m14-8v8M9 10v8m6-8v8M3 20h18"/></>,
+    budget: <><circle cx="12" cy="12" r="8"/><path d="M12 4v8h8"/></>,
+    savings: <><path d="M5 11a7 6 0 0 1 14 0v3a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z"/><path d="M9 17v3m6-3v3M12 8v4"/></>,
     cards: <><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/></>,
   }
   return <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" aria-hidden="true" {...common}>{pathsByName[name]}</svg>

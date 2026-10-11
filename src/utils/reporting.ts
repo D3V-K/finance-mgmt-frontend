@@ -57,3 +57,9 @@ export function buildTrendData(reports: MonthlyReport[], from: string, to: strin
     return { month, income, expense, net: income === null || expense === null ? null : income - expense, partial: from > `${month}-01` || to < monthEnd }
   })
 }
+
+/** Calendar-day arithmetic on ISO dates; payday cycle boundaries themselves always come from the server. */
+export function addDays(date: string, days: number) {
+  const [year, month, day] = date.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)
+}
