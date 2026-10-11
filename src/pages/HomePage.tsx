@@ -7,8 +7,11 @@ import { normalizeApiError } from '@/api/errors'
 import { useCategoryReport, useMonthlyReport } from '@/api/hooks/reports'
 import { useTransactions } from '@/api/hooks/transactions'
 import type { MonthlyReport } from '@/api/types'
+import { MigrationNotice } from '@/components/finance/MigrationNotice'
 import { Button } from '@/components/ui/Button'
 import { Alert, EmptyState, Skeleton } from '@/components/ui/Feedback'
+import { isFeatureEnabled } from '@/config/features'
+import { DashboardPage } from '@/pages/DashboardPage'
 import { formatDate, formatJPY } from '@/utils/format'
 
 const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/
@@ -69,7 +72,12 @@ function CurrentBalances() {
   </section>
 }
 
+/** Ledger deployments lead with available cash and the forecast; legacy deployments keep the Cash/Bank overview. */
 export function HomePage() {
+  return isFeatureEnabled('dashboard') ? <DashboardPage defaultMonth={currentMonth()} /> : <LegacyHomePage />
+}
+
+function LegacyHomePage() {
   const [params, setParams] = useSearchParams()
   const requestedMonth = params.get('month') ?? ''
   const month = MONTH_PATTERN.test(requestedMonth) ? requestedMonth : currentMonth()
@@ -93,6 +101,7 @@ export function HomePage() {
 
   return <section aria-labelledby="dashboard-heading" className="space-y-6">
     <div className="flex flex-wrap items-end justify-between gap-4"><div><h2 id="dashboard-heading" className="text-2xl font-bold tracking-tight text-slate-950">Overview</h2><p className="mt-1 text-sm text-slate-600">Your financial activity for {monthLabel(month, 'long')}.</p></div><label className="text-sm font-medium text-slate-700">Month<input aria-label="Dashboard month" type="month" value={month} onChange={(event) => setParams({ month: event.target.value })} className="mt-1 block min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" /></label></div>
+    <MigrationNotice />
     <CurrentBalances />
     <section aria-labelledby="period-heading" className="space-y-3"><h3 id="period-heading" className="text-lg font-semibold">Monthly cash flow · {monthLabel(month, 'long')}</h3><p className="text-sm text-slate-600">Cash flow is income minus expenses during the selected month.</p>
     {monthlyQuery.isLoading ? <div aria-label="Loading summary" className="grid gap-4 sm:grid-cols-3"><Skeleton className="h-32"/><Skeleton className="h-32"/><Skeleton className="h-32"/></div> : monthlyQuery.isError ? <ErrorPanel message={`Could not load the monthly summary. ${normalizeApiError(monthlyQuery.error).message}`} retry={() => monthlyQuery.refetch()} /> : <SummaryCards data={monthlyQuery.data ?? []} month={month} />}

@@ -1,8 +1,9 @@
 import { http, HttpResponse } from 'msw'
+import { ledgerHandlers } from '@/test/ledgerFixtures'
 
 export const categoryFixture = {
   id: 'category-1', user_id: 'test-user', name: 'Groceries', type: 'expense' as const,
-  color: '#e11d48', parent_id: null, created_at: '2026-08-01T00:00:00Z', children: [],
+  color: '#e11d48', parent_id: null, created_at: '2026-08-01T00:00:00Z', archived_at: null, children: [],
 }
 
 export const transactionFixture = {
@@ -15,7 +16,8 @@ export const handlers = [
   http.get('*/transfers', () => HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20, total_pages: 0 })),
   http.get('*/reports/balance', () => HttpResponse.json({ cash_balance: 0, bank_balance: 0, total_balance: 0 })),
 
-  http.get('*/categories', () => HttpResponse.json([categoryFixture])),
+  // Matches the paginated wire shape of GET /categories.
+  http.get('*/categories', () => HttpResponse.json({ items: [categoryFixture], total: 1, page: 1, page_size: 100, total_pages: 1 })),
   http.get('*/categories/tree', () => HttpResponse.json([categoryFixture])),
   http.get('*/transactions', () => HttpResponse.json({ items: [transactionFixture], total: 1, page: 1, page_size: 20, total_pages: 1 })),
   http.post('*/transactions', async ({ request }) => HttpResponse.json({ ...transactionFixture, ...await request.json() as Record<string, unknown> }, { status: 201 })),
@@ -23,4 +25,5 @@ export const handlers = [
   http.delete('*/transactions/:id', () => new HttpResponse(null, { status: 204 })),
   http.get('*/reports/monthly', () => HttpResponse.json([{ month: '2026-08-01', income: 300000, expense: 80000 }])),
   http.get('*/reports/by-category', () => HttpResponse.json([{ category_id: categoryFixture.id, category_name: categoryFixture.name, total: 80000 }])),
+  ...ledgerHandlers,
 ]

@@ -12,7 +12,12 @@ export function isValidISODate(value: string) {
 }
 
 export function tokyoToday(now = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now)
+  return zonedToday('Asia/Tokyo', now)
+}
+
+/** Calendar date in the user's configured timezone; never UTC-truncated. */
+export function zonedToday(timeZone: string, now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now)
   const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)!.value
   return `${part('year')}-${part('month')}-${part('day')}`
 }
@@ -51,4 +56,10 @@ export function buildTrendData(reports: MonthlyReport[], from: string, to: strin
     const monthEnd = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10)
     return { month, income, expense, net: income === null || expense === null ? null : income - expense, partial: from > `${month}-01` || to < monthEnd }
   })
+}
+
+/** Calendar-day arithmetic on ISO dates; payday cycle boundaries themselves always come from the server. */
+export function addDays(date: string, days: number) {
+  const [year, month, day] = date.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)
 }

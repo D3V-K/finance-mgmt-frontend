@@ -2,6 +2,8 @@ export type UUID = string
 export type ISODate = string
 export type ISODateTime = string
 
+// Legacy Cash/Bank selector used by /transactions, /transfers and /opening-balances.
+// Named accounts use AccountKind/account_id instead (see ledgerTypes.ts).
 export type AccountType = 'cash' | 'bank'
 
 export type CategoryType = 'income' | 'expense'
@@ -14,6 +16,8 @@ export interface Category {
   color: string | null
   parent_id: UUID | null
   created_at: ISODateTime
+  /** Present once the backend supports archival; archived categories stay on history but not new entry. */
+  archived_at?: ISODateTime | null
 }
 
 export interface CategoryTree extends Category {
@@ -63,7 +67,8 @@ export interface TransactionFilter extends DateRangeFilter {
   page_size?: number
 }
 
-// Reserved for endpoints that opt into pagination. Current backend list routes return arrays.
+// Paginated list routes (/transactions, /transfers, /categories) share this envelope.
+// Report routes and a few lookups return plain arrays.
 export interface PaginationParams {
   page?: number
   page_size?: number
@@ -127,6 +132,7 @@ export interface TransferFilter extends DateRangeFilter, PaginationParams {}
 
 export type NetWorthPoint = NetBalancePoint
 
+// Legacy Cash/Bank totals from /reports/balance.
 export interface AccountBalance {
   cash_balance: number
   bank_balance: number
@@ -134,3 +140,5 @@ export interface AccountBalance {
 }
 
 export type CurrentBalance = AccountBalance
+
+export * from '@/api/ledgerTypes'

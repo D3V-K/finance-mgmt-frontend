@@ -1,0 +1,197 @@
+import { expect, test } from '@playwright/test'
+import { balanceOf, mockLedgerApi, signIn } from './ledgerApi'
+
+test.beforeEach(({ page }) => { page.on('pageerror', (error) => console.error(`Browser error: ${error.message}`)) })
+
+test('sets up named accounts with independent opening balances', async ({ page }) => {
+  const state = await mockLedgerApi(page)
+  await signIn(page)
+  await page.getByRole('link', { name: 'Accounts' }).first().click()
+  await expect(page.getByRole('heading', { name: 'No accounts yet' })).toBeVisible()
+
+  for (const [name, kind] of [['Everyday Bank', 'BANK'], ['Rewards Card', 'CREDIT_CARD']]) {
+    await page.getByRole('button', { name: 'Add account' }).first().click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByLabel('Account name').fill(name)
+    await dialog.getByLabel('Account type').selectOption(kind)
+    await dialog.getByRole('button', { name: 'Add account' }).click()
+    await expect(dialog).toBeHidden()
+  }
+  await expect(page.getByText('Opening balance needed')).toHaveCount(2)
+
+  await page.getByRole('button', { name: 'Set opening balance for Everyday Bank' }).click()
+  await page.getByRole('dialog').getByLabel('Date').fill('2026-09-01')
+  await page.getByRole('dialog').getByLabel('Balance (JPY)').fill('100000')
+  await page.getByRole('dialog').getByRole('button', { name: 'Save opening balance' }).click()
+
+  await page.getByRole('button', { name: 'Set opening balance for Rewards Card' }).click()
+  await page.getByRole('dialog').getByLabel('Date').fill('2026-09-01')
+  await page.getByRole('dialog').getByLabel('Amount owed (JPY)').fill('20000')
+  await page.getByRole('dialog').getByRole('button', { name: 'Save opening balance' }).click()
+
+  await expect(page.getByText('¥100,000')).toBeVisible()
+  await expect(page.getByText('Amount owed ¥20,000')).toBeVisible()
+  expect(state.openings[state.accounts[1].id].amount).toBe(-20000)
+})
+
+test('migrates payment-date history to purchase-date tracking without rewriting it', async ({ page }) => {
+  const state = await mockLedgerApi(page)
+  state.accounts.push(
+    { id: 'acct-bank', user_id: 'e2e-user', name: 'Everyday Bank', kind: 'BANK', currency: 'JPY', archived_at: null, created_at: '', updated_at: '' },
+    { id: 'acct-card', user_id: 'e2e-user', name: 'Rewards Card', kind: 'CREDIT_CARD', currency: 'JPY', archived_at: null, created_at: '', updated_at: '' },
+  )
+  state.legacyTransactions.push(
+    { id: 'tx-old', account_type: 'bank', amount: 18000, description: 'August card bill', category_id: 'cat-groceries', transaction_date: '2026-08-27' },
+    { id: 'tx-new', account_type: 'bank', amount: 4000, description: 'Pharmacy', category_id: 'cat-groceries', transaction_date: '2026-09-03' },
+  )
+  await signIn(page)
+  await page.getByRole('link', { name: 'Start setup' }).click()
+  await page.getByRole('button', { name: 'Get started' }).click()
+  await page.getByLabel('Records labelled Bank').selectOption('acct-bank')
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.getByLabel('Start tracking purchases on').fill('2026-09-01')
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.getByLabel('Everyday Bank balance (JPY)').fill('100000')
+  await page.getByLabel('Rewards Card amount owed (JPY)').fill('20000')
+  await page.getByRole('button', { name: 'Save balances and continue' }).click()
+  await expect(page.getByRole('cell', { name: 'Pharmacy Groceries · Expense' })).toBeVisible()
+  await expect(page.getByText('August card bill')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Preview migration' }).click()
+  await expect(page.getByText('This preview did not change anything.')).toBeVisible()
+  expect(state.cutover).toBeNull()
+  await page.getByLabel(/I understand that records before/).check()
+  await page.getByRole('button', { name: 'Confirm migration' }).click()
+  await expect(page.getByRole('heading', { name: /Purchase-date tracking started/ })).toBeVisible()
+  await expect(page.getByText('Every record after the start date is assigned to an account.')).toBeVisible()
+  expect(state.events).toHaveLength(1)
+  expect(state.events[0]).toMatchObject({ occurred_on: null, date_basis: 'legacy_recorded_date' })
+  expect(state.openings['acct-card'].amount).toBe(-20000)
+})
+
+test('records a card purchase immediately and repays it later without a second expense', async ({ page }) => {
+  const state = await mockLedgerApi(page)
+  state.accounts.push(
+    { id: 'acct-bank', user_id: 'e2e-user', name: 'Everyday Bank', kind: 'BANK', currency: 'JPY', archived_at: null, created_at: '', updated_at: '' },
+    { id: 'acct-card', user_id: 'e2e-user', name: 'Rewards Card', kind: 'CREDIT_CARD', currency: 'JPY', archived_at: null, created_at: '', updated_at: '' },
+  )
+  state.openings['acct-bank'] = { amount: 100000, as_of_date: '2026-09-01', revision: 1 }
+  state.openings['acct-card'] = { amount: 0, as_of_date: '2026-09-01', revision: 1 }
+  state.settings.default_account_id = 'acct-card'
+  await signIn(page)
+  await page.getByRole('link', { name: 'Transactions' }).first().click()
+  await page.getByRole('button', { name: 'Record purchase' }).click()
+  let dialog = page.getByRole('dialog', { name: 'Record a purchase' })
+  await dialog.getByLabel('Amount (JPY)').fill('6000')
+  await dialog.getByLabel('Category').selectOption('cat-groceries')
+  await expect(dialog.getByText(/Your bank balance doesn't change/)).toBeVisible()
+  await dialog.getByRole('button', { name: 'Record purchase' }).click()
+  await expect(page.getByText('Purchase recorded.')).toBeVisible()
+
+  await page.getByRole('link', { name: 'Accounts' }).first().click()
+  await expect(page.getByText('¥100,000')).toBeVisible()
+  await expect(page.getByText('Amount owed ¥6,000')).toBeVisible()
+
+  // The purchase changes spending and debt, but not the bank balance on the dashboard.
+  await page.getByRole('link', { name: 'Dashboard' }).first().click()
+  await expect(page.getByRole('table', { name: 'Cash available by account' })).toContainText('¥100,000')
+
+  await page.getByRole('link', { name: 'Transfers' }).first().click()
+  await page.getByRole('tab', { name: 'Card repayments' }).click()
+  await page.getByRole('button', { name: 'New card repayment' }).click()
+  dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Amount (JPY)').fill('6000')
+  await dialog.getByLabel('Paid from').selectOption('acct-bank')
+  await dialog.getByLabel('Card').selectOption('acct-card')
+  await dialog.getByLabel('Payment date').fill('2026-09-10')
+  await dialog.getByRole('button', { name: 'Record card repayment' }).click()
+  await expect(page.getByRole('table', { name: 'Card repayments' })).toContainText('Everyday Bank → Rewards Card')
+
+  await page.getByRole('link', { name: 'Accounts' }).first().click()
+  await expect(page.getByText('¥94,000')).toBeVisible()
+  await expect(page.getByText('Amount owed ¥0')).toBeVisible()
+  expect(state.events.filter((event) => event.kind === 'EXPENSE')).toHaveLength(1)
+})
+
+test('schedules a card purchase, reserves cash for it and repays it once', async ({ page }) => {
+  const state = await mockLedgerApi(page)
+  state.accounts.push(
+    { id: 'acct-bank', user_id: 'e2e-user', name: 'Everyday Bank', kind: 'BANK', currency: 'JPY', archived_at: null, created_at: '', updated_at: '' },
+    { id: 'acct-card', user_id: 'e2e-user', name: 'Rewards Card', kind: 'CREDIT_CARD', currency: 'JPY', archived_at: null, created_at: '', updated_at: '' },
+  )
+  state.openings['acct-bank'] = { amount: 100000, as_of_date: '2026-09-01', revision: 1 }
+  state.openings['acct-card'] = { amount: 0, as_of_date: '2026-09-01', revision: 1 }
+  state.cardSettings['acct-card'] = { settlement_account_id: 'acct-bank', closing_day: 15, payment_day: 27 }
+  state.events.push({ id: 'purchase-1', kind: 'EXPENSE', amount: 24000, category_id: 'cat-groceries', description: 'Television', occurred_on: '2026-09-05', date_basis: 'known', recorded_at: '2026-09-05T10:00:00', is_reversal: false, original_event_id: null, reverses_event_id: null, replaces_event_id: null, postings: [{ id: 'p1', account_id: 'acct-card', delta: -24000, effective_date: '2026-09-05' }] })
+  await signIn(page)
+  await page.getByRole('link', { name: 'Cards' }).first().click()
+  await page.getByRole('link', { name: /Payments and schedules/ }).click()
+
+  await page.getByRole('button', { name: 'Add payment dates' }).click()
+  let dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Purchase', { exact: true }).selectOption('purchase-1')
+  await dialog.getByLabel('Number of payments').fill('3')
+  await dialog.getByLabel('First due date').fill('2026-09-27')
+  await dialog.getByRole('button', { name: 'Add payment dates' }).click()
+  await expect(page.getByText('3 payment dates added.')).toBeVisible()
+
+  await page.getByRole('button', { name: /^Reserve for Sep 27, 2026/ }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Reserve money' }).click()
+  await expect(page.getByText('¥8,000 reserved for the Sep 27, 2026 payment.')).toBeVisible()
+  expect(balanceOfBank(state)).toBe(100000)
+  await page.getByRole('link', { name: 'Dashboard' }).first().click()
+  const available = page.getByRole('article', { name: 'Available after commitments' })
+  // ¥100,000 less ¥8,000 reserved and ¥16,000 of later installments still due, each counted once.
+  await expect(available).toContainText('¥76,000')
+  await page.goBack()
+
+  await page.getByRole('button', { name: /^Record repayment for Sep 27, 2026/ }).click()
+  dialog = page.getByRole('dialog', { name: 'Record repayment' })
+  await dialog.getByRole('button', { name: 'Record card repayment' }).click()
+  await expect(page.getByText('Card repayment recorded.')).toBeVisible()
+  await expect(page.getByRole('table', { name: 'Card payment dates' }).locator('span', { hasText: /^Paid$/ })).toBeVisible()
+  expect(balanceOfBank(state)).toBe(92000)
+  expect(state.events.filter((event) => event.kind === 'EXPENSE')).toHaveLength(1)
+  expect(state.reserves[0].amount).toBe(0)
+})
+
+function balanceOfBank(state: Awaited<ReturnType<typeof mockLedgerApi>>) {
+  return balanceOf(state, 'acct-bank', '2026-09-30')
+}
+
+test('closes a month against a bank statement after finding a missing fee', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const state = await mockLedgerApi(page)
+  state.today = '2026-09-30'
+  state.accounts.push({ id: 'acct-bank', user_id: 'e2e-user', name: 'Everyday Bank', kind: 'BANK', currency: 'JPY', archived_at: null, created_at: '', updated_at: '' })
+  state.openings['acct-bank'] = { amount: 100000, as_of_date: '2026-09-01', revision: 1 }
+  state.events.push({ id: 'shop', kind: 'EXPENSE', amount: 4000, category_id: 'cat-groceries', description: 'Pharmacy', occurred_on: '2026-09-05', date_basis: 'known', recorded_at: '2026-09-05T10:00:00', is_reversal: false, original_event_id: null, reverses_event_id: null, replaces_event_id: null, postings: [{ id: 'p-shop', account_id: 'acct-bank', delta: -4000, effective_date: '2026-09-05' }] })
+  await signIn(page)
+  await page.getByRole('button', { name: 'Open navigation' }).click()
+  await page.getByRole('complementary', { name: 'Mobile menu' }).getByRole('link', { name: 'Review', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Review', level: 2 })).toBeVisible()
+  await page.getByLabel('Account', { exact: true }).selectOption('acct-bank')
+  await page.getByLabel('Statement from').fill('2026-09-01')
+  await page.getByLabel('Statement to').fill('2026-09-30')
+  await page.getByLabel('Statement opening balance (JPY)').fill('100000')
+  await page.getByLabel('Statement closing balance (JPY)').fill('95500')
+  await page.getByRole('button', { name: 'Start check' }).click()
+
+  // Failure path: the statement shows ¥500 less than the app, so confirmation is blocked.
+  const session = page.getByRole('region', { name: /Everyday Bank · Sep 1, 2026/ })
+  await expect(session.getByText('Unexplained difference', { exact: true })).toBeVisible()
+  await expect(session.getByText('¥500', { exact: true })).toBeVisible()
+  await expect(session.getByRole('button', { name: 'Confirm reconciliation' })).toBeDisabled()
+
+  await session.getByRole('button', { name: 'Record a missing entry' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Amount (JPY)').fill('500')
+  await dialog.getByLabel('Category').selectOption('cat-groceries')
+  await dialog.getByLabel('Description (optional)').fill('Monthly account fee')
+  await dialog.getByRole('button', { name: 'Record purchase' }).click()
+  await session.getByRole('button', { name: /Include entry posted 2026-09-30/ }).click()
+  await expect(session.getByText('None')).toBeVisible()
+  await session.getByRole('button', { name: 'Confirm reconciliation' }).click()
+  await expect(session.getByText('Reconciled', { exact: true })).toBeVisible()
+  expect(state.sessions[0].status).toBe('confirmed')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})

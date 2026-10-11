@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import { ProtectedRoute, PublicOnlyRoute } from '@/auth/routes'
 import { AppShell } from '@/components/layout/AppShell'
+import { FeatureRoute } from '@/components/layout/FeatureGate'
 import { Spinner } from '@/components/ui/Feedback'
 
 const HomePage = lazy(() => import('@/pages/HomePage').then((module) => ({ default: module.HomePage })))
@@ -13,6 +14,13 @@ const ReportsPage = lazy(() => import('@/pages/ReportsPage').then((module) => ({
 
 const TransfersPage = lazy(() => import('@/pages/TransfersPage').then((module) => ({ default: module.TransfersPage })))
 const OpeningBalancesPage = lazy(() => import('@/pages/OpeningBalancesPage').then((module) => ({ default: module.OpeningBalancesPage })))
+const AccountsPage = lazy(() => import('@/pages/AccountsPage').then((module) => ({ default: module.AccountsPage })))
+const CardsPage = lazy(() => import('@/pages/CardsPage').then((module) => ({ default: module.CardsPage })))
+const BudgetPage = lazy(() => import('@/pages/BudgetPage').then((module) => ({ default: module.BudgetPage })))
+const SavingsPage = lazy(() => import('@/pages/SavingsPage').then((module) => ({ default: module.SavingsPage })))
+const InvestmentsPage = lazy(() => import('@/pages/InvestmentsPage').then((module) => ({ default: module.InvestmentsPage })))
+const ReviewPage = lazy(() => import('@/pages/ReviewPage').then((module) => ({ default: module.ReviewPage })))
+const MigrationPage = lazy(() => import('@/pages/MigrationPage').then((module) => ({ default: module.MigrationPage })))
 
 export default function App() {
   return (
@@ -27,6 +35,14 @@ export default function App() {
             <Route path="transactions" element={<TransactionsPage />} />
             <Route path="transfers" element={<TransfersPage />} />
             <Route path="opening-balances" element={<OpeningBalancesPage />} />
+            <Route path="accounts" element={<FeatureRoute feature="accounts"><AccountsPage /></FeatureRoute>} />
+            <Route path="cards" element={<FeatureRoute feature="cards"><CardsPage /></FeatureRoute>} />
+            <Route path="cards/:cardId" element={<FeatureRoute feature="cards"><CardsPage /></FeatureRoute>} />
+            <Route path="budget" element={<FeatureRoute feature="budgets"><BudgetPage /></FeatureRoute>} />
+            <Route path="savings" element={<FeatureRoute feature="budgets"><SavingsPage /></FeatureRoute>} />
+            <Route path="investments" element={<FeatureRoute feature="investments"><InvestmentsPage /></FeatureRoute>} />
+            <Route path="review" element={<FeatureRoute feature="reconciliation"><ReviewPage /></FeatureRoute>} />
+            <Route path="setup/migration" element={<FeatureRoute feature="cutover"><MigrationPage /></FeatureRoute>} />
             <Route path="categories" element={<CategoriesPage />} />
             <Route path="reports" element={<ReportsPage />} />
             <Route path="*" element={<NotFoundPage />} />

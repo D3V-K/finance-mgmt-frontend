@@ -44,6 +44,63 @@ The frontend follows the sibling `finance-mgmt-backend-lite` contract: lowercase
 
 Backend limitations: transaction account filtering is not exposed, so account filters and account drill-down links are omitted. The current history endpoint returns an empty series for opening balances without transactions; the frontend explains that empty state and does not manufacture baseline points. These backend behaviors must change before opening-only history can be displayed.
 
+## Financial ledger rollout
+
+The canonical ledger (named accounts, purchases, card repayments, payday budgets, forecasts, investments and reconciliation) ships behind one build-time flag because the backend releases those contracts in stages and has no capability-discovery endpoint. `VITE_LEDGER_FEATURES` lists the released capabilities (`accounts`, `events`, `cutover`, `category-archive`, `cards`, `budgets`, `forecast`, `dashboard`, `investments`, `reconciliation`) or `all`:
+
+| Deployment | Value | Behavior |
+|---|---|---|
+| Legacy only | empty (default) | The Cash/Bank screens above; no new endpoint is ever requested. |
+| Partial | e.g. `accounts,events,category-archive` | Only listed features render and call the API. |
+| Full ledger | `all` | Every ledger screen is available. |
+
+`src/config/features.ts` enforces the flag at the resource layer, so a disabled feature cannot issue a request even if a component asks for one. A 401, 403 or network failure never switches the app to legacy writes.
+
+Data-layer conventions shared by every ledger screen:
+
+- **Types** live in `src/api/ledgerTypes.ts` and mirror the backend wire format, including uppercase `AccountKind`/`EventKind` values. `null` money means unknown and is never displayed or summed as zero.
+- **Query keys** (`src/api/queryKeys.ts`) include every parameter that changes the answer: account, as-of date, cycle, horizon and forecast scenario. Signing out, a failed token refresh or a different user clears and cancels the whole query cache (`src/auth/AuthContext.tsx`).
+- **Invalidation** goes through one matrix (`src/api/invalidation.ts`). For example, a purchase refreshes spending, budgets, card debt, forecasts and position; a card repayment refreshes bank, card, schedules and forecasts but never spending or budgets.
+- **Writes** send one idempotency key per logical write (`useIdempotencyKey`): retrying unchanged input reuses it, and edited input gets a new key. 409 responses are reported as `conflict` so screens refetch before retrying. Forms keep their input on failure and ignore double submits (`useSingleFlight`).
+
+### Named accounts (`accounts`)
+
+`/accounts` lists bank, cash, credit-card and brokerage-cash accounts grouped by kind, each with its own opening balance entered as the balance at the start of a date. An account without an opening shows "Opening balance needed", never ¥0; zero is a real, savable amount. Card balances are shown and entered as a positive "Amount owed" or "Credit balance"; the adapter converts them to the server's signed convention (negative when owed). Corrections explain that later balances are recalculated and earlier entries are not replayed, and list earlier baselines. Archived accounts keep their history, can be shown for review and cannot receive new entries. The default entry account is a server-side preference. The legacy `/opening-balances` page keeps editing the original Cash/Bank baseline.
+
+Playwright runs two projects: `chromium` against a legacy-only build and `ledger` against a build with `VITE_LEDGER_FEATURES=all`, backed by the in-memory mock in `e2e/ledgerApi.ts`.
+
+### Purchase-date migration (`cutover`)
+
+`/setup/migration` guides an existing user from payment-date Cash/Bank records to named accounts: overview → accounts (with optional Cash/Bank suggestions) → start date → balances at the start of that date → assignment of records dated on or after it → read-only server preview → explicit acknowledgment and confirmation. Balances are saved to each account as the user goes, so the flow resumes from server state after a refresh; nothing financial is stored in the browser. Purchase dates are never guessed: legacy records show "Recorded on payment date", a card assignment requires a user-entered purchase date, and other assignments keep an unknown purchase date unless one is entered. Confirmation sends exactly the previewed request once; if the response is lost the page re-reads the server status before offering a retry. After confirmation the same route lists records still awaiting an account and resolves them through a read-only preview. The dashboard and Accounts page show a setup call-to-action until then, and a backup download (server export) is offered before confirming when `reconciliation` is enabled.
+
+### Purchases, repayments and corrections (`events`)
+
+With `events` enabled, `/transactions` records canonical entries: a purchase needs only an amount, an active account or card, a category and the purchase date, defaulting to the server's local today, the user's default account and their most recent category. A card purchase is explained up front: it counts as spending now and adds to the amount owed, and the bank balance changes only when the repayment is recorded. Income, refunds (linked to the original purchase), card repayments (no category, dated when money moved) and transfers each have their own form. `/transfers` shows transfers and card repayments as separate tabs, never mixed with purchases. Every write sends an idempotency key, so a retry after a lost response cannot record twice. Posted entries are never edited or deleted: "Correct" offers a linked replacement or a reversal, and both keep the original visible. History shows purchase-date quality, posting dates and archived account or category names. Filters and pagination are server-side URL parameters. Earlier Cash/Bank records stay available read-only at `?view=earlier`. Without the flag, the original Cash/Bank screens are unchanged.
+
+### Category archival (`category-archive`)
+
+Archive is the normal way to retire a category: past entries and report totals keep it, and new-entry selectors stop offering it. Delete is only offered for leaf categories, and the server decides whether one was ever used; a 409 explains why and offers "Archive instead". Archival is not recursive, so subcategories stay as they are. A type change that the server refuses for a used category keeps the form and explains why. "Show archived categories" lists retired categories for review and restore. History views and filters still resolve archived names, and an existing entry keeps its archived category when opened.
+
+### Cards (`cards`)
+
+`/cards` shows each card's amount owed (or credit balance), its next withdrawal with an estimated or confirmed date, the money reserved for it, and any shortfall. All of these are server figures. `/cards/:id` adds the settlement bank and closing/payment days, upcoming withdrawals grouped by due date (a statement total equals the payment dates it covers and is never added on top of them), and the payment dates themselves. A purchase or existing opening debt can be split into installments: it was counted as spending once, and payment dates only spread the repayment. "Reserve" earmarks existing cash without moving money, and an insufficient-cash refusal is explained without changing anything. "Record repayment" posts one card-repayment movement and links it to the schedule, which consumes the matching reserve once. A repayment that was recorded but could not be linked is reported and can be applied later. Refunds of the purchase can be applied to reduce what is due. An estimated date that passes is never marked paid automatically.
+
+### Payday budgets and savings (`budgets`)
+
+`/budget` shows category limits for one payday-to-payday cycle. The server owns the cycle boundaries (payday setting, short-month rule and explicit overrides), and "Previous/Next cycle" asks the server for the cycle around the day before the start or the next payday. Each line shows planned, purchased, refunds, net spending and remaining, and overspending is stated in text, not only by colour. Purchases with an unknown date are reported as outside every cycle. Payday day, time zone and per-month payday overrides are edited on the same page. `/savings` keeps goal targets, money actually set aside in buckets, and money not yet set aside as three separate figures. Setting aside, releasing and moving between buckets earmark existing cash; nothing is transferred, and none of it is spending. Card reserves and savings share the same cash, so a refused allocation keeps the input and refreshes the figures. Goals and amounts are always the user's own; templates only suggest a name.
+
+### Payday dashboard and cash forecast (`dashboard`, `forecast`)
+
+With `dashboard` enabled, `/` uses the server's dashboard aggregate. It leads with "Available after commitments", what is left in this payday's budget, and the next withdrawal. Account balances, money set aside, and known bills not yet reserved are listed per account, because one account's cash never covers another account's withdrawal. A total is shown only when every account is known; otherwise unknown figures say "Needs review" and give the reason. The cash forecast (`/reports/cash-forecast`) is per account, has an accessible day-by-day table alongside the chart, names the date an account would go below zero, shows same-day clearing uncertainty verbatim, and lists its assumptions. Scenario items such as an unconfirmed bonus appear only when the scenario is selected, and expected salary is future income, never present cash. Scenario, forecast range, forecast account, `as_of` date and month are URL parameters. Server warnings are shown verbatim, each with a link to the screen that resolves it. The forecast and monthly sections load and retry independently of the headline figures.
+
+### Investments and net worth (`investments`)
+
+`/investments` lists brokerage-cash accounts with their cash balance and the latest manual, securities-only value. Values are history: a second value for the same date is refused, and holdings changes noted after a value mark it stale. Noting a trade records only that holdings changed; nothing is fetched, recommended or executed. With `investments` enabled, Reports adds "Net worth": bank and cash, brokerage cash, securities and card amount owed from the server's financial position, plus a month-end series with gaps wherever the server reports it incomplete. With `events` enabled, Reports uses canonical events by known purchase date ("Income minus spending", spending after refunds), keeps categories whose refunds bring spending to zero or below, and relabels the legacy chart as "Net balance from earlier Cash/Bank records" with its basis, so it is never presented as net worth.
+
+### Reconciliation and data-quality review (`reconciliation`)
+
+`/review` starts with a weekly-check and monthly-close guide and a "Things to review" queue built from `/ledger-quality`: unassigned earlier records, missing openings, unknown purchase dates, stale valuations, schedule/debt mismatches, unreserved card payments, unfinished or changed statement checks, and accounts never reconciled. Each item links to the screen that fixes it. A statement check takes the account, period and statement opening/closing figures (card statements are entered as amounts owed and sent with the server's sign), previews the server's activity for the period so items not on the statement can be unticked, then shows the server-calculated closing balance and the unexplained difference. Entries added later surface as unmatched until included. Confirmation is only possible at a zero difference. Missing entries are recorded normally, wrong ones are corrected through linked corrections, and a balance adjustment is a separate, explicit, idempotent action with a required reason and a preview stating it affects balances, not income or spending. A reconciled period that changes is shown as changed and can be reopened. Export downloads the server's complete, user-scoped JSON, or reports that the history is too large, without saving a partial file.
+
 ## Architecture
 
 ### Static Hosting (S3 + CloudFront)
@@ -262,6 +319,8 @@ API_PROXY_TARGET=http://localhost:8000
 VITE_USER_POOL_ID=ap-northeast-1_XXXXXXXXX
 VITE_USER_POOL_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxx
 VITE_AWS_REGION=ap-northeast-1
+# Optional: released ledger capabilities, or "all". Empty keeps the legacy experience.
+VITE_LEDGER_FEATURES=
 ```
 
 In production these are set as environment variables in the GitHub Actions deploy workflow and substituted into the build at CI time — they are never committed to the repository.

@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/auth/useAuth', () => ({ useAuth: () => ({ signIn: mocks.signIn }) }))
 vi.mock('@/api/hooks/categories', () => ({
   useCategories: () => mocks.query([mocks.category]), useCategoryTree: () => mocks.query([mocks.category]),
-  useCreateCategory: mocks.mutation, useUpdateCategory: mocks.mutation, useDeleteCategory: mocks.mutation,
+  useCreateCategory: mocks.mutation, useUpdateCategory: mocks.mutation, useDeleteCategory: mocks.mutation, useArchiveCategory: mocks.mutation, useRestoreCategory: mocks.mutation,
 }))
 vi.mock('@/api/hooks/transactions', () => ({
   useTransactions: () => mocks.query({ items: [], total: 0, page: 1, page_size: 20, total_pages: 0 }),

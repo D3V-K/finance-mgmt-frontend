@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Hub } from 'aws-amplify/utils'
 import { MemoryRouter, useLocation } from 'react-router-dom'
@@ -31,14 +32,16 @@ function LocationProbe() {
   return <output data-testid="location">{location.pathname}{location.search}</output>
 }
 
-function renderApp(path = '/') {
+function renderApp(path = '/', client = new QueryClient()) {
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <AuthProvider>
-        <App />
-        <LocationProbe />
-      </AuthProvider>
-    </MemoryRouter>,
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[path]}>
+        <AuthProvider>
+          <App />
+          <LocationProbe />
+        </AuthProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
 }
 
@@ -140,6 +143,40 @@ describe('authentication routing', () => {
     expect(await screen.findByRole('heading', { name: 'Transactions', level: 2 })).toBeInTheDocument()
     expect(transactionsLinks[0]).toHaveClass('text-indigo-700')
     expect(screen.getByTestId('location')).toHaveTextContent('/transactions')
+  })
+
+  it.each(['signedOut', 'tokenRefresh_failure'])('drops every cached financial response on %s', async (event) => {
+    authMocks.getCurrentUser.mockResolvedValue({ username: 'user@example.com', userId: 'user-a' })
+    const client = new QueryClient()
+    renderApp('/', client)
+    expect(await screen.findByRole('heading', { name: /overview/i })).toBeInTheDocument()
+    client.setQueryData(['accounts', 'list', { includeArchived: false }], [{ id: 'private-account' }])
+    client.setQueryData(['dashboard', 'today'], { available_cash: 1 })
+
+    Hub.dispatch('auth', { event })
+
+    expect(await screen.findByRole('heading', { name: /sign in/i })).toBeInTheDocument()
+    expect(client.getQueryCache().getAll()).toHaveLength(0)
+  })
+
+  it('never shows the previous user\'s cached data to the next user', async () => {
+    authMocks.getCurrentUser
+      .mockResolvedValueOnce({ username: 'a@example.com', userId: 'user-a' })
+      .mockResolvedValueOnce({ username: 'b@example.com', userId: 'user-b' })
+    authMocks.signOut.mockResolvedValue(undefined)
+    authMocks.signIn.mockResolvedValue({ isSignedIn: true })
+    const client = new QueryClient()
+    renderApp('/', client)
+    expect(await screen.findByRole('heading', { name: /overview/i })).toBeInTheDocument()
+    client.setQueryData(['financial-events', 'list', {}], { items: [{ id: 'user-a-event' }] })
+
+    fireEvent.click(screen.getAllByRole('button', { name: /sign out/i })[0])
+    fireEvent.change(await screen.findByLabelText(/email/i), { target: { value: 'b@example.com' } })
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'password' } })
+    fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }))
+
+    expect(await screen.findByRole('heading', { name: /overview/i })).toBeInTheDocument()
+    expect(client.getQueryData(['financial-events', 'list', {}])).toBeUndefined()
   })
 
   it('shows a not-found experience without leaving the authenticated shell', async () => {

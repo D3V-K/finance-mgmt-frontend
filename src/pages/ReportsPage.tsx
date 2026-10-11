@@ -2,10 +2,14 @@ import { useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { normalizeApiError } from '@/api/errors'
+import { useCanonicalMonthlyReport } from '@/api/hooks/events'
 import { useCategoryReport, useMonthlyReport, useNetBalanceReport } from '@/api/hooks/reports'
+import type { DateRangeFilter, MonthlyReport } from '@/api/types'
+import { CanonicalCategorySpending, NetWorthSection } from '@/components/reports/LedgerReports'
 import { Button } from '@/components/ui/Button'
 import { Alert, EmptyState, Skeleton } from '@/components/ui/Feedback'
 import { Input, Select } from '@/components/ui/FormControls'
+import { isFeatureEnabled } from '@/config/features'
 import { formatJPY } from '@/utils/format'
 import { buildTrendData, monthKeys, isValidISODate, presetRange, type ReportPreset } from '@/utils/reporting'
 
@@ -20,7 +24,26 @@ function ErrorPanel({ message, retry }: { message: string; retry: () => void }) 
   return <div className="space-y-3"><Alert>{message}</Alert><Button variant="secondary" onClick={retry}>Try again</Button></div>
 }
 
+type MonthlySource = (filters: DateRangeFilter, enabled: boolean) => { query: { isLoading: boolean; isError: boolean; error: unknown; refetch: () => unknown }; rows: MonthlyReport[] }
+
+function useLegacyMonthly(filters: DateRangeFilter, enabled: boolean) {
+  const query = useMonthlyReport(filters, enabled)
+  return { query, rows: query.data ?? [] }
+}
+
+/** Canonical events by known purchase date; spending is net of refunds. */
+function useCanonicalMonthly(filters: DateRangeFilter, enabled: boolean) {
+  const query = useCanonicalMonthlyReport(filters, enabled)
+  const rows = useMemo(() => (query.data ?? []).map((point) => ({ month: point.month, income: point.income, expense: point.net_spending })), [query.data])
+  return { query, rows }
+}
+
 export function ReportsPage() {
+  // The data source is fixed per deployment, so the chosen hook never changes between renders.
+  return isFeatureEnabled('events') ? <ReportsView ledger useMonthly={useCanonicalMonthly} /> : <ReportsView ledger={false} useMonthly={useLegacyMonthly} />
+}
+
+function ReportsView({ ledger, useMonthly }: { ledger: boolean; useMonthly: MonthlySource }) {
   const [params, setParams] = useSearchParams()
   const requestedPreset = params.get('range')
   const preset: ReportPreset = PRESETS.some((item) => item.value === requestedPreset) ? requestedPreset as ReportPreset : '6m'
@@ -29,15 +52,18 @@ export function ReportsPage() {
   const to = params.get('to') ?? defaults.to
   const dateError = !isValidISODate(from) || !isValidISODate(to) ? 'Enter valid start and end dates.' : from > to ? 'Start date must be on or before end date.' : ''
   const filters = useMemo(() => dateError ? {} : { from, to }, [dateError, from, to])
-  const monthlyQuery = useMonthlyReport(filters, !dateError)
+  // Ledger deployments report canonical events by known purchase date; legacy ones keep recorded-date reports.
+  // The two bases are never mixed in one chart.
+  const { query: monthlyQuery, rows: monthlyRows } = useMonthly(filters, !dateError)
   const balanceQuery = useNetBalanceReport(filters, !dateError)
   const balanceData = useMemo(() => {
     const points = new Map((balanceQuery.data ?? []).map((point) => [point.month.slice(0, 7), point.net_worth]))
     return dateError ? [] : monthKeys(from, to).map((month) => ({ month, label: monthLabel(month), balance: points.get(month) ?? null }))
   }, [balanceQuery.data, dateError, from, to])
-  const categoriesQuery = useCategoryReport(filters, !dateError)
+  const categoriesQuery = useCategoryReport(filters, !dateError && !ledger)
+  const labels = ledger ? { expense: 'Spending after refunds', net: 'Income minus spending' } : { expense: 'Expenses', net: 'Net cash flow' }
 
-  const trendData = useMemo(() => dateError ? [] : buildTrendData(monthlyQuery.data ?? [], from, to), [dateError, from, monthlyQuery.data, to])
+  const trendData = useMemo(() => dateError ? [] : buildTrendData(monthlyRows, from, to), [dateError, from, monthlyRows, to])
   const categories = useMemo(() => [...(categoriesQuery.data ?? [])].filter((item) => item.total > 0).sort((a, b) => b.total - a.total), [categoriesQuery.data])
   const updateRange = (nextPreset: ReportPreset) => {
     if (nextPreset === 'custom') setParams({ range: 'custom', from, to })
@@ -62,28 +88,30 @@ export function ReportsPage() {
     </div>
 
     {!dateError && <div className="grid gap-4 sm:grid-cols-3">
-      {[{ label: 'Income', value: totals.income, color: 'text-emerald-700' }, { label: 'Expenses', value: totals.expense, color: 'text-rose-700' }, { label: 'Net cash flow', value: totals.income - totals.expense, color: totals.income - totals.expense < 0 ? 'text-rose-700' : 'text-slate-950' }].map((item) => <article key={item.label} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-sm font-medium text-slate-600">{item.label}</p><p className={`mt-2 text-2xl font-bold ${item.color}`}>{monthlyQuery.isLoading ? '—' : hasMonthlyData ? formatJPY(item.value) : 'No data'}</p><p className="mt-1 text-xs text-slate-500">Total of available monthly data</p></article>)}
+      {[{ label: 'Income', value: totals.income, color: 'text-emerald-700' }, { label: labels.expense, value: totals.expense, color: 'text-rose-700' }, { label: labels.net, value: totals.income - totals.expense, color: totals.income - totals.expense < 0 ? 'text-rose-700' : 'text-slate-950' }].map((item) => <article key={item.label} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-sm font-medium text-slate-600">{item.label}</p><p className={`mt-2 text-2xl font-bold ${item.color}`}>{monthlyQuery.isLoading ? '—' : hasMonthlyData ? formatJPY(item.value) : 'No data'}</p><p className="mt-1 text-xs text-slate-500">Total of available monthly data</p></article>)}
     </div>}
 
     <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="cash-flow-heading">
-      <h3 id="cash-flow-heading" className="font-semibold text-slate-950">Monthly cash flow</h3><p className="mt-1 text-sm text-slate-500">Income, expenses, and the resulting net movement. Gaps mean the API returned no data for that month.</p>
+      <h3 id="cash-flow-heading" className="font-semibold text-slate-950">{ledger ? 'Income minus spending' : 'Monthly cash flow'}</h3><p className="mt-1 text-sm text-slate-500">{ledger ? 'Income and spending by purchase date, after refunds. Transfers, card repayments and money set aside are not spending. Entries with an unknown purchase date are not included.' : 'Income, expenses, and the resulting net movement.'} Gaps mean the API returned no data for that month.</p>
       {dateError ? <div className="mt-5"><EmptyState title="Choose a valid date range" description="Correct the dates above to generate this report." /></div> : monthlyQuery.isLoading ? <Skeleton className="mt-5 h-72" /> : monthlyQuery.isError ? <div className="mt-5"><ErrorPanel message={`Could not load monthly trends. ${normalizeApiError(monthlyQuery.error).message}`} retry={() => monthlyQuery.refetch()} /></div> : !hasMonthlyData ? <div className="mt-5"><EmptyState title="No monthly report data" description="There is no reported activity in this date range." /></div> : <>
-        <div className="mt-5 h-72" aria-hidden="true"><ResponsiveContainer width="100%" height="100%"><LineChart data={chartTrendData} margin={{ left: 8, right: 12 }}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="label" tick={{ fontSize: 12 }}/><YAxis width={68} tickFormatter={(value) => `¥${Number(value).toLocaleString()}`} tick={{ fontSize: 11 }}/><Tooltip formatter={(value) => value == null ? 'No data' : formatJPY(Number(value))}/><Legend/><Line connectNulls={false} type="monotone" dataKey="income" name="Income" stroke="#047857" strokeWidth={2}/><Line connectNulls={false} type="monotone" dataKey="expense" name="Expenses" stroke="#be123c" strokeWidth={2}/><Line connectNulls={false} type="monotone" dataKey="net" name="Net cash flow" stroke="#4f46e5" strokeWidth={2}/></LineChart></ResponsiveContainer></div>
-        <div className="mt-5 overflow-x-auto"><table className="min-w-full text-sm"><caption className="sr-only">Monthly cash-flow values shown in the chart</caption><thead><tr className="border-b border-slate-200">{['Month', 'Income', 'Expenses', 'Net cash flow'].map((heading) => <th key={heading} className={`py-2 font-medium text-slate-500 ${heading === 'Month' ? 'text-left' : 'text-right'}`}>{heading}</th>)}</tr></thead><tbody>{trendData.map((point) => <tr key={point.month} className="border-b border-slate-100"><th scope="row" className="py-2 text-left font-medium">{monthLabel(point.month)}{point.partial ? <span className="ml-1 text-xs font-normal text-slate-500">(partial)</span> : null}</th>{[point.income, point.expense, point.net].map((value, index) => <td key={index} className="py-2 text-right">{value === null ? <span className="text-slate-400">No data</span> : formatJPY(value)}</td>)}</tr>)}</tbody></table></div>
+        <div className="mt-5 h-72" aria-hidden="true"><ResponsiveContainer width="100%" height="100%"><LineChart data={chartTrendData} margin={{ left: 8, right: 12 }}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="label" tick={{ fontSize: 12 }}/><YAxis width={68} tickFormatter={(value) => `¥${Number(value).toLocaleString()}`} tick={{ fontSize: 11 }}/><Tooltip formatter={(value) => value == null ? 'No data' : formatJPY(Number(value))}/><Legend/><Line connectNulls={false} type="monotone" dataKey="income" name="Income" stroke="#047857" strokeWidth={2}/><Line connectNulls={false} type="monotone" dataKey="expense" name={labels.expense} stroke="#be123c" strokeWidth={2}/><Line connectNulls={false} type="monotone" dataKey="net" name={labels.net} stroke="#4f46e5" strokeWidth={2}/></LineChart></ResponsiveContainer></div>
+        <div className="mt-5 overflow-x-auto"><table className="min-w-full text-sm"><caption className="sr-only">Monthly cash-flow values shown in the chart</caption><thead><tr className="border-b border-slate-200">{['Month', 'Income', labels.expense, labels.net].map((heading) => <th key={heading} className={`py-2 font-medium text-slate-500 ${heading === 'Month' ? 'text-left' : 'text-right'}`}>{heading}</th>)}</tr></thead><tbody>{trendData.map((point) => <tr key={point.month} className="border-b border-slate-100"><th scope="row" className="py-2 text-left font-medium">{monthLabel(point.month)}{point.partial ? <span className="ml-1 text-xs font-normal text-slate-500">(partial)</span> : null}</th>{[point.income, point.expense, point.net].map((value, index) => <td key={index} className="py-2 text-right">{value === null ? <span className="text-slate-400">No data</span> : formatJPY(value)}</td>)}</tr>)}</tbody></table></div>
       </>}
     </article>
 
-    <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="spending-heading">
+    {ledger ? (dateError ? null : <CanonicalCategorySpending from={from} to={to} />) : <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="spending-heading">
       <h3 id="spending-heading" className="font-semibold text-slate-950">Spending by category</h3><p className="mt-1 text-sm text-slate-500">Select a category in the table to review its matching expense transactions.</p>
       {dateError ? <div className="mt-5"><EmptyState title="Choose a valid date range" description="Correct the dates above to generate this report." /></div> : categoriesQuery.isLoading ? <Skeleton className="mt-5 h-72"/> : categoriesQuery.isError ? <div className="mt-5"><ErrorPanel message={`Could not load category spending. ${normalizeApiError(categoriesQuery.error).message}`} retry={() => categoriesQuery.refetch()} /></div> : !categories.length ? <div className="mt-5"><EmptyState title="No category spending" description="There are no reported expenses in this date range." /></div> : <div className="mt-5 grid gap-6 xl:grid-cols-2">
         <div className="h-72" aria-hidden="true"><ResponsiveContainer width="100%" height="100%"><BarChart data={categories} layout="vertical" margin={{ left: 8, right: 16 }}><CartesianGrid strokeDasharray="3 3" horizontal={false}/><XAxis type="number" tickFormatter={(value) => `¥${Number(value).toLocaleString()}`} tick={{ fontSize: 11 }}/><YAxis type="category" dataKey="category_name" width={100} tick={{ fontSize: 12 }}/><Tooltip formatter={(value) => formatJPY(Number(value))}/><Bar dataKey="total" name="Expenses" fill={CATEGORY_COLORS[0]} radius={[0, 4, 4, 0]}/></BarChart></ResponsiveContainer></div>
         <div className="overflow-x-auto"><table className="min-w-full text-sm"><caption className="sr-only">Spending category values shown in the chart</caption><thead><tr className="border-b border-slate-200"><th className="py-2 text-left font-medium text-slate-500">Category</th><th className="py-2 text-right font-medium text-slate-500">Expenses</th></tr></thead><tbody>{categories.map((category, index) => { const query = new URLSearchParams({ from, to, category_id: category.category_id, type: 'expense' }); return <tr key={category.category_id} className="border-b border-slate-100"><th scope="row" className="py-3 text-left font-medium"><span className="mr-2 inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: CATEGORY_COLORS[index % CATEGORY_COLORS.length] }} aria-hidden="true"/><Link className="text-indigo-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500" to={`/transactions?${query}`}>{category.category_name}</Link></th><td className="py-3 text-right font-semibold">{formatJPY(category.total)}</td></tr> })}</tbody></table></div>
       </div>}
-    </article>
+    </article>}
+
+    {isFeatureEnabled('investments') && !dateError && <NetWorthSection from={from} to={to} />}
 
     <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="net-balance-heading">
-      <h3 id="net-balance-heading" className="font-semibold text-slate-950">Net balance over time</h3>
-      <p className="mt-1 text-sm text-slate-500">Total funds at a point in time, including opening balances as returned by the API. Cash flow is income minus expenses during a period. Transfers do not change total balance.</p>
+      <h3 id="net-balance-heading" className="font-semibold text-slate-950">{ledger ? 'Net balance from earlier Cash/Bank records' : 'Net balance over time'}</h3>
+      <p className="mt-1 text-sm text-slate-500">{ledger ? 'Basis: the original Cash and Bank records and opening balances only. It is not net worth: it excludes named accounts, card debt and investments.' : 'Total funds at a point in time, including opening balances as returned by the API. Cash flow is income minus expenses during a period. Transfers do not change total balance.'}</p>
       <p className="mt-2 text-xs text-slate-500">Only reported monthly values are shown. Gaps mean no reported balance; values are never estimated for missing months or partial date ranges.</p>
       {dateError ? <EmptyState title="Choose a valid date range" description="Correct the dates above to generate this report." /> : balanceQuery.isLoading ? <div role="status" aria-label="Loading net balance"><Skeleton className="mt-5 h-72" /></div> : balanceQuery.isError ? <div className="mt-5"><ErrorPanel message={`Could not load net balance. ${normalizeApiError(balanceQuery.error).message}`} retry={() => balanceQuery.refetch()} /></div> : !balanceQuery.data?.length ? <EmptyState title="No net balance history" description="The API returned no monthly balance points for this range. Opening balances alone may not produce history until transactions are recorded." /> : <>
         <div className="mt-5 h-72" aria-hidden="true"><ResponsiveContainer width="100%" height="100%"><LineChart data={balanceData} margin={{ left: 8, right: 12 }}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="label" tick={{ fontSize: 12 }}/><YAxis width={68} tickFormatter={(value) => `¥${Number(value).toLocaleString()}`} tick={{ fontSize: 11 }}/><Tooltip formatter={(value) => value == null ? 'No data' : formatJPY(Number(value))}/><Line connectNulls={false} type="linear" dataKey="balance" name="Net balance" stroke="#4f46e5" strokeWidth={2}/></LineChart></ResponsiveContainer></div>

@@ -1,8 +1,12 @@
 import axios from 'axios'
+import { FeatureDisabledError } from '@/config/features'
 
 export type ApiErrorKind =
   | 'unauthorized'
+  | 'forbidden'
   | 'validation'
+  | 'conflict'
+  | 'disabled'
   | 'network'
   | 'not-found'
   | 'server'
@@ -32,6 +36,7 @@ function messageFromBody(body: FastApiErrorBody | undefined, fallback: string) {
 
 export function normalizeApiError(error: unknown): ApiError {
   if (error instanceof ApiError) return error
+  if (error instanceof FeatureDisabledError) return new ApiError(error.message, 'disabled', undefined, error.feature)
   if (!axios.isAxiosError(error)) {
     return new ApiError(error instanceof Error ? error.message : 'An unexpected error occurred.', 'unknown')
   }
@@ -44,7 +49,11 @@ export function normalizeApiError(error: unknown): ApiError {
   const body = error.response.data as FastApiErrorBody | undefined
   const message = messageFromBody(body, error.message || 'The request failed.')
   if (status === 401) return new ApiError(message, 'unauthorized', status, body)
-  if (status === 400 || status === 409 || status === 422) {
+  if (status === 403) return new ApiError(message, 'forbidden', status, body)
+  // A conflict means the server state changed or the request was already applied
+  // differently; callers refetch before retrying rather than resubmitting blindly.
+  if (status === 409) return new ApiError(message, 'conflict', status, body)
+  if (status === 400 || status === 422) {
     return new ApiError(message, 'validation', status, body)
   }
   if (status === 404) return new ApiError(message, 'not-found', status, body)

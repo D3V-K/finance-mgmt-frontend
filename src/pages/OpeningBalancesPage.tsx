@@ -5,6 +5,7 @@ import { normalizeApiError } from '@/api/errors'
 import type { AccountType, OpeningBalance } from '@/api/types'
 import { Button } from '@/components/ui/Button'
 import { Alert, Spinner } from '@/components/ui/Feedback'
+import { isFeatureEnabled } from '@/config/features'
 
 const accounts = ['cash', 'bank'] as const
 const label = (account: AccountType) => account === 'cash' ? 'Cash' : 'Bank'
@@ -66,6 +67,7 @@ export function OpeningBalancesForm({ balances }: { balances: OpeningBalance[] }
 export function OpeningBalancesPage() {
   const query = useOpeningBalances()
   return <section aria-labelledby="opening-heading" className="mx-auto max-w-3xl space-y-5"><h2 id="opening-heading" className="text-2xl font-bold">Opening balances</h2><Link to="/" className="inline-block text-indigo-700 underline">Back to dashboard</Link>
+    {isFeatureEnabled('accounts') && <Alert tone="info">Named accounts now keep their own opening balances on the <Link to="/accounts" className="font-semibold underline">Accounts</Link> page. This page edits the original Cash and Bank baseline used by your earlier records and reports.</Alert>}
     {query.isLoading ? <Spinner label="Loading opening balances…" /> : query.isError ? <div className="space-y-3"><Alert>Could not load opening balances. {normalizeApiError(query.error).message}</Alert><Button onClick={() => query.refetch()}>Retry opening balances</Button></div> : <OpeningBalancesForm balances={query.data ?? []} />}
   </section>
 }

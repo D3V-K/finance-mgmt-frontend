@@ -2,17 +2,34 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '@/auth/useAuth'
 import { Button } from '@/components/ui/Button'
+import { isFeatureEnabled, type LedgerFeature } from '@/config/features'
 import { useUiStore } from '@/store/uiStore'
 
-type IconName = 'dashboard' | 'transactions' | 'categories' | 'reports'
-const paths: Array<{ to: string; label: string; icon: IconName }> = [
+type IconName = 'dashboard' | 'transactions' | 'categories' | 'reports' | 'accounts' | 'cards' | 'budget' | 'savings' | 'investments' | 'review'
+// Ledger entries appear only once their backend contract is released on this deployment.
+const allPaths: Array<{ to: string; label: string; icon: IconName; feature?: LedgerFeature; hidden?: boolean }> = [
   { to: '/', label: 'Dashboard', icon: 'dashboard' },
   { to: '/transactions', label: 'Transactions', icon: 'transactions' },
   { to: '/transfers', label: 'Transfers', icon: 'transactions' },
+  { to: '/accounts', label: 'Accounts', icon: 'accounts', feature: 'accounts' },
+  { to: '/cards', label: 'Cards', icon: 'cards', feature: 'cards' },
+  { to: '/budget', label: 'Budget', icon: 'budget', feature: 'budgets' },
+  { to: '/savings', label: 'Savings', icon: 'savings', feature: 'budgets' },
+  { to: '/investments', label: 'Investments', icon: 'investments', feature: 'investments' },
   { to: '/opening-balances', label: 'Opening balances', icon: 'dashboard' },
+  { to: '/setup/migration', label: 'Migration setup', icon: 'accounts', feature: 'cutover', hidden: true },
+  { to: '/review', label: 'Review', icon: 'review', feature: 'reconciliation' },
   { to: '/categories', label: 'Categories', icon: 'categories' },
   { to: '/reports', label: 'Reports', icon: 'reports' },
 ]
+const visiblePaths = () => allPaths.filter((item) => !item.hidden && (!item.feature || isFeatureEnabled(item.feature)))
+
+function pageTitle(pathname: string) {
+  const exact = allPaths.find((item) => item.to === pathname)
+  if (exact) return exact.label
+  // Detail routes such as /cards/:id inherit their section's title.
+  return allPaths.filter((item) => item.to !== '/' && pathname.startsWith(`${item.to}/`)).sort((a, b) => b.to.length - a.to.length)[0]?.label ?? 'Page not found'
+}
 
 function Icon({ name }: { name: IconName }) {
   const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
@@ -21,12 +38,18 @@ function Icon({ name }: { name: IconName }) {
     transactions: <><path d="M7 7h11m0 0-3-3m3 3-3 3M17 17H6m0 0 3 3m-3-3 3-3"/></>,
     categories: <><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H10l2 2h5.5A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5z"/></>,
     reports: <><path d="M4 20V10m5 10V4m6 16v-7m5 7V7"/></>,
+    accounts: <><path d="M3 10 12 4l9 6M5 10v8m14-8v8M9 10v8m6-8v8M3 20h18"/></>,
+    budget: <><circle cx="12" cy="12" r="8"/><path d="M12 4v8h8"/></>,
+    savings: <><path d="M5 11a7 6 0 0 1 14 0v3a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z"/><path d="M9 17v3m6-3v3M12 8v4"/></>,
+    investments: <><path d="M4 19 10 13l4 4 6-8"/><path d="M15 9h5v5"/></>,
+    review: <><path d="M9 11l2 2 4-4"/><rect x="4" y="3" width="16" height="18" rx="2"/></>,
+    cards: <><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/></>,
   }
   return <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" aria-hidden="true" {...common}>{pathsByName[name]}</svg>
 }
 
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {
-  return <nav aria-label="Primary navigation" className="mt-7 space-y-1 px-3">{paths.map(({ to, label, icon }) => <NavLink key={to} to={to} end={to === '/'} onClick={onNavigate} className={({ isActive }) => `flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${isActive ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950'}`}><Icon name={icon}/>{label}</NavLink>)}</nav>
+  return <nav aria-label="Primary navigation" className="mt-7 space-y-1 px-3">{visiblePaths().map(({ to, label, icon }) => <NavLink key={to} to={to} end={to === '/'} onClick={onNavigate} className={({ isActive }) => `flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${isActive ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950'}`}><Icon name={icon}/>{label}</NavLink>)}</nav>
 }
 
 export function AppShell() {
@@ -37,7 +60,7 @@ export function AppShell() {
   const [signingOut, setSigningOut] = useState(false)
   const [signOutError, setSignOutError] = useState('')
   const identity = user?.signInDetails?.loginId ?? user?.username ?? 'Account'
-  const title = paths.find((item) => item.to === location.pathname)?.label ?? 'Page not found'
+  const title = pageTitle(location.pathname)
 
   useEffect(() => { closeMobileNav() }, [closeMobileNav, location.pathname])
   useEffect(() => {

@@ -20,6 +20,8 @@ vi.mock('@/api/hooks/categories', () => ({
   useCreateCategory: () => ({ mutateAsync: mocks.create, isPending: false }),
   useUpdateCategory: () => ({ mutateAsync: mocks.update, isPending: false }),
   useDeleteCategory: () => ({ mutateAsync: mocks.remove, isPending: false }),
+  useArchiveCategory: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRestoreCategory: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 describe('CategoriesPage', () => {
