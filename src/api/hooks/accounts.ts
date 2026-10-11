@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { invalidateFor } from '@/api/invalidation'
 import { ledgerKeys } from '@/api/queryKeys'
 import { accountsApi, entryOptionsApi, financeSettingsApi } from '@/api/resources/accounts'
@@ -11,6 +11,11 @@ export function useAccounts(includeArchived = false) {
 
 export function useAccountOpening(id: UUID | undefined) {
   return useQuery({ queryKey: ledgerKeys.accounts.opening(id ?? ''), queryFn: () => accountsApi.opening(id!), enabled: isFeatureEnabled('accounts') && Boolean(id) })
+}
+
+/** Openings for several accounts at once; each entry is null while unset. */
+export function useAccountOpenings(ids: UUID[]) {
+  return useQueries({ queries: ids.map((id) => ({ queryKey: ledgerKeys.accounts.opening(id), queryFn: () => accountsApi.opening(id), enabled: isFeatureEnabled('accounts') })) })
 }
 
 export function useAccountOpeningRevisions(id: UUID | undefined) {

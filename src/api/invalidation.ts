@@ -54,7 +54,7 @@ export const invalidationMatrix: Record<LedgerMutation, readonly QueryKey[]> = {
   reconciliation: [k.reconciliations.all, k.quality.all, k.dashboard.all],
   // Legacy writes keep their original refresh scope, plus cutover status for migration.
   'legacy-transaction': [legacy.transactions, legacy.reports, k.cutover.all, k.quality.all],
-  'legacy-transfer': [legacy.transfers, legacy.balance, legacy.netBalance, k.cutover.all, k.quality.all],
+  'legacy-transfer': [legacy.transfers, legacy.balance, legacy.netBalance, ['transactions', 'since'], k.cutover.all, k.quality.all],
   'legacy-opening': [legacy.openingBalances, legacy.balance, legacy.netBalance],
 }
 

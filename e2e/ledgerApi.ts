@@ -19,6 +19,9 @@ export function createLedgerState() {
       { id: 'cat-groceries', user_id: 'e2e-user', name: 'Groceries', type: 'expense', color: '#e11d48', parent_id: null, created_at: '2026-08-01T00:00:00', archived_at: null, children: [] },
       { id: 'cat-salary', user_id: 'e2e-user', name: 'Salary', type: 'income', color: '#059669', parent_id: null, created_at: '2026-08-01T00:00:00', archived_at: null, children: [] },
     ],
+    legacyTransactions: [] as Array<Json & { id: string; transaction_date: string; amount: number; category_id: string }>,
+    legacyTransfers: [] as Array<Json & { id: string; transfer_date: string; amount: number }>,
+    cutover: null as null | { as_of_date: string; unresolved: Array<{ source_table: string; source_id: string; recorded_date: string; amount: number; category_id: string | null }>; request: string },
     counter: 0,
   }
 }
@@ -75,14 +78,50 @@ on('GET', /^\/entry-options$/, (route, { state }) => json(route, {
   accounts: state.accounts.filter((account) => !account.archived_at).map(({ id, name, kind }) => ({ id, name, kind })),
   categories: state.categories.filter((category) => !category.archived_at).map(({ id, name, type }) => ({ id, name, type })), recent_category_ids: [],
 }))
-on('GET', /^\/ledger-cutovers\/unresolved$/, (route) => json(route, { detail: 'Confirm cutover first' }, 404))
+on('GET', /^\/ledger-cutovers\/unresolved$/, (route, { state }) => state.cutover
+  ? json(route, { as_of_date: state.cutover.as_of_date, count: state.cutover.unresolved.length, records: state.cutover.unresolved })
+  : json(route, { detail: 'Confirm cutover first' }, 404))
+function cutoverReport(state: LedgerState, body: Json) {
+  const asOf = String(body.as_of_date)
+  const mapped = new Set([...(body.transactions as Json[] ?? []).map((row) => row.transaction_id), ...(body.transfers as Json[] ?? []).map((row) => row.transfer_id)])
+  const unresolvedTx = state.legacyTransactions.filter((row) => row.transaction_date >= asOf && !mapped.has(row.id))
+  const unresolvedTransfers = state.legacyTransfers.filter((row) => row.transfer_date >= asOf && !mapped.has(row.id))
+  const sums: Record<string, number> = {}
+  for (const row of state.legacyTransactions) sums[row.category_id] = (sums[row.category_id] ?? 0) + row.amount
+  return {
+    as_of_date: asOf, legacy_transaction_count: state.legacyTransactions.length, legacy_transfer_count: state.legacyTransfers.length, category_sums: sums,
+    legacy_date_min: state.legacyTransactions[0]?.transaction_date ?? null, legacy_date_max: state.legacyTransactions.at(-1)?.transaction_date ?? null,
+    unresolved_transaction_ids: unresolvedTx.map((row) => row.id), unresolved_transfer_ids: unresolvedTransfers.map((row) => row.id),
+    unresolved_count: unresolvedTx.length + unresolvedTransfers.length, mapped_count: mapped.size,
+    opening_total: (body.openings as Json[]).reduce((sum, row) => sum + Number(row.amount), 0), legacy_account_type_is_unverified: true, purchase_date_basis: 'unknown_unless_confirmed',
+    unresolved: [...unresolvedTx.map((row) => ({ source_table: 'transactions', source_id: row.id, recorded_date: row.transaction_date, amount: row.amount, category_id: row.category_id })), ...unresolvedTransfers.map((row) => ({ source_table: 'transfers', source_id: row.id, recorded_date: row.transfer_date, amount: row.amount, category_id: null }))],
+  }
+}
+on('POST', /^\/ledger-cutovers\/preview$/, (route, { state, body }) => { const report: Partial<ReturnType<typeof cutoverReport>> = cutoverReport(state, body); delete report.unresolved; return json(route, report) })
+on('POST', /^\/ledger-cutovers\/confirm$/, (route, { state, body }) => {
+  const request = JSON.stringify(body)
+  if (state.cutover) return state.cutover.request === request ? json(route, { id: 'cutover-1', as_of_date: state.cutover.as_of_date, unresolved_count: state.cutover.unresolved.length, status: 'confirmed' }) : json(route, { detail: 'Cutover already confirmed with different data' }, 409)
+  const report = cutoverReport(state, body)
+  for (const opening of body.openings as Json[]) state.openings[String(opening.account_id)] = { amount: Number(opening.amount), as_of_date: report.as_of_date, revision: 1 }
+  for (const mapping of body.transactions as Json[] ?? []) {
+    const row = state.legacyTransactions.find((item) => item.id === mapping.transaction_id)!
+    const income = state.categories.find((category) => category.id === row.category_id)?.type === 'income'
+    state.events.push({ id: nextId(state, 'event'), kind: income ? 'INCOME' : 'EXPENSE', amount: row.amount, category_id: row.category_id, occurred_on: mapping.occurred_on ?? null, date_basis: mapping.occurred_on ? 'confirmed_purchase_date' : 'legacy_recorded_date', postings: [{ id: nextId(state, 'posting'), account_id: String(mapping.account_id), delta: income ? row.amount : -row.amount, effective_date: String(mapping.effective_date) }] })
+  }
+  state.cutover = { as_of_date: report.as_of_date, unresolved: report.unresolved, request }
+  return json(route, { id: 'cutover-1', as_of_date: report.as_of_date, unresolved_count: report.unresolved.length, status: 'confirmed' })
+})
 on('GET', /^\/categories(\/tree)?$/, (route, { state, path }) => json(route, path.endsWith('tree') ? state.categories : { items: state.categories, total: state.categories.length, page: 1, page_size: 100, total_pages: 1 }))
 
 // Legacy screens still render on a full-ledger deployment.
 on('GET', /^\/opening-balances$/, (route) => json(route, []))
 on('GET', /^\/reports\/balance$/, (route) => json(route, { cash_balance: 0, bank_balance: 0, total_balance: 0 }))
 on('GET', /^\/reports\/(monthly|by-category|net-worth)$/, (route) => json(route, []))
-on('GET', /^\/(transactions|transfers)$/, (route) => json(route, { items: [], total: 0, page: 1, page_size: 20, total_pages: 0 }))
+on('GET', /^\/(transactions|transfers)$/, (route, { state, path, query }) => {
+  const from = query.get('from') ?? ''
+  const rows = path === '/transactions' ? state.legacyTransactions.filter((row) => row.transaction_date >= from) : state.legacyTransfers.filter((row) => row.transfer_date >= from)
+  return json(route, { items: rows, total: rows.length, page: 1, page_size: 100, total_pages: rows.length ? 1 : 0 })
+})
 
 export async function mockLedgerApi(page: Page, state = createLedgerState()) {
   await page.route('**/api/**', async (route) => {

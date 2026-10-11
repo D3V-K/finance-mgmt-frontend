@@ -7,16 +7,17 @@ import { useUiStore } from '@/store/uiStore'
 
 type IconName = 'dashboard' | 'transactions' | 'categories' | 'reports' | 'accounts'
 // Ledger entries appear only once their backend contract is released on this deployment.
-const allPaths: Array<{ to: string; label: string; icon: IconName; feature?: LedgerFeature }> = [
+const allPaths: Array<{ to: string; label: string; icon: IconName; feature?: LedgerFeature; hidden?: boolean }> = [
   { to: '/', label: 'Dashboard', icon: 'dashboard' },
   { to: '/transactions', label: 'Transactions', icon: 'transactions' },
   { to: '/transfers', label: 'Transfers', icon: 'transactions' },
   { to: '/accounts', label: 'Accounts', icon: 'accounts', feature: 'accounts' },
   { to: '/opening-balances', label: 'Opening balances', icon: 'dashboard' },
+  { to: '/setup/migration', label: 'Migration setup', icon: 'accounts', feature: 'cutover', hidden: true },
   { to: '/categories', label: 'Categories', icon: 'categories' },
   { to: '/reports', label: 'Reports', icon: 'reports' },
 ]
-const visiblePaths = () => allPaths.filter((item) => !item.feature || isFeatureEnabled(item.feature))
+const visiblePaths = () => allPaths.filter((item) => !item.hidden && (!item.feature || isFeatureEnabled(item.feature)))
 
 function pageTitle(pathname: string) {
   const exact = allPaths.find((item) => item.to === pathname)

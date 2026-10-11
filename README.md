@@ -69,6 +69,10 @@ Data-layer conventions shared by every ledger screen:
 
 Playwright runs two projects: `chromium` against a legacy-only build and `ledger` against a build with `VITE_LEDGER_FEATURES=all`, backed by the in-memory mock in `e2e/ledgerApi.ts`.
 
+### Purchase-date migration (`cutover`)
+
+`/setup/migration` guides an existing user from payment-date Cash/Bank records to named accounts: overview → accounts (with optional Cash/Bank suggestions) → start date → balances at the start of that date → assignment of records dated on or after it → read-only server preview → explicit acknowledgment and confirmation. Balances are saved to each account as the user goes, so the flow resumes from server state after a refresh; nothing financial is stored in the browser. Purchase dates are never guessed: legacy records show "Recorded on payment date", a card assignment requires a user-entered purchase date, and other assignments keep an unknown purchase date unless one is entered. Confirmation sends exactly the previewed request once; if the response is lost the page re-reads the server status before offering a retry. After confirmation the same route lists records still awaiting an account and resolves them through a read-only preview. The dashboard and Accounts page show a setup call-to-action until then, and a backup download (server export) is offered before confirming when `reconciliation` is enabled.
+
 ## Architecture
 
 ### Static Hosting (S3 + CloudFront)

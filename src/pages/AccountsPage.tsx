@@ -1,15 +1,14 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { normalizeApiError } from '@/api/errors'
 import { useAccountBalance, useAccountOpening, useAccountOpeningRevisions, useAccounts, useCreateAccount, useEntryOptions, useFinanceSettings, useSaveFinanceSettings, useSetAccountOpening, useUpdateAccount } from '@/api/hooks/accounts'
-import { useCutoverStatus } from '@/api/hooks/cutover'
 import { useSingleFlight } from '@/api/idempotency'
 import type { Account, AccountKind, AccountOpening, ISODate } from '@/api/types'
 import { Amount, StatusBadge } from '@/components/finance/Amount'
+import { MigrationNotice } from '@/components/finance/MigrationNotice'
 import { Button } from '@/components/ui/Button'
 import { Dialog } from '@/components/ui/Dialog'
 import { Alert, EmptyState, Skeleton } from '@/components/ui/Feedback'
 import { Input, Select } from '@/components/ui/FormControls'
-import { isFeatureEnabled } from '@/config/features'
 import { ACCOUNT_KINDS, accountKindGroupLabel, accountKindLabel, cardAmountToSigned, cardBalanceParts, signedToCardAmount, type CardBalanceSide } from '@/utils/accounts'
 import { formatDate, formatJPY } from '@/utils/format'
 import { isValidISODate, tokyoToday } from '@/utils/reporting'
@@ -172,15 +171,6 @@ function Preferences({ accounts }: { accounts: Account[] }) {
   </section>
 }
 
-function MigrationMappings() {
-  const status = useCutoverStatus()
-  if (!isFeatureEnabled('cutover') || !status.data || status.data.count === 0) return null
-  return <section aria-labelledby="mapping-heading" className="rounded-xl border border-amber-200 bg-amber-50 p-5">
-    <h3 id="mapping-heading" className="font-semibold text-amber-950">Earlier records still need an account</h3>
-    <p className="mt-1 text-sm text-amber-900">{status.data.count} {status.data.count === 1 ? 'record' : 'records'} from your Cash/Bank history after {formatDate(status.data.as_of_date)} are not yet assigned to a named account. Balances that depend on them are marked as incomplete until they are reviewed.</p>
-  </section>
-}
-
 type DialogState = { type: 'create' } | { type: 'rename'; account: Account } | { type: 'opening'; account: Account; opening: AccountOpening | null } | { type: 'archive'; account: Account }
 
 export function AccountsPage() {
@@ -197,7 +187,7 @@ export function AccountsPage() {
   return <section aria-labelledby="accounts-heading" className="space-y-6">
     <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 id="accounts-heading" className="text-2xl font-bold tracking-tight">Accounts</h2><p className="mt-1 max-w-2xl text-sm text-slate-600">Every bank account, wallet, credit card and brokerage cash account you track. Each one starts from its own opening balance.</p></div><Button onClick={() => setDialog({ type: 'create' })}>Add account</Button></div>
     {feedback && <Alert tone="success">{feedback}</Alert>}
-    <MigrationMappings />
+    <MigrationNotice />
     <label className="flex min-h-10 items-center gap-2 text-sm font-medium text-slate-700"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />Show archived accounts</label>
     {options.isError && <Alert tone="info">Today's date from your settings is unavailable, so balances are not shown yet. <button className="underline" onClick={() => options.refetch()}>Retry</button></Alert>}
     {accounts.isLoading ? <div aria-label="Loading accounts" className="space-y-3"><Skeleton className="h-24" /><Skeleton className="h-24" /></div>
