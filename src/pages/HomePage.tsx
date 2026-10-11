@@ -10,6 +10,8 @@ import type { MonthlyReport } from '@/api/types'
 import { MigrationNotice } from '@/components/finance/MigrationNotice'
 import { Button } from '@/components/ui/Button'
 import { Alert, EmptyState, Skeleton } from '@/components/ui/Feedback'
+import { isFeatureEnabled } from '@/config/features'
+import { DashboardPage } from '@/pages/DashboardPage'
 import { formatDate, formatJPY } from '@/utils/format'
 
 const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/
@@ -70,7 +72,12 @@ function CurrentBalances() {
   </section>
 }
 
+/** Ledger deployments lead with available cash and the forecast; legacy deployments keep the Cash/Bank overview. */
 export function HomePage() {
+  return isFeatureEnabled('dashboard') ? <DashboardPage defaultMonth={currentMonth()} /> : <LegacyHomePage />
+}
+
+function LegacyHomePage() {
   const [params, setParams] = useSearchParams()
   const requestedMonth = params.get('month') ?? ''
   const month = MONTH_PATTERN.test(requestedMonth) ? requestedMonth : currentMonth()

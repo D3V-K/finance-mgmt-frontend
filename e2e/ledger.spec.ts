@@ -91,6 +91,10 @@ test('records a card purchase immediately and repays it later without a second e
   await expect(page.getByText('¥100,000')).toBeVisible()
   await expect(page.getByText('Amount owed ¥6,000')).toBeVisible()
 
+  // The purchase changes spending and debt, but not the bank balance on the dashboard.
+  await page.getByRole('link', { name: 'Dashboard' }).first().click()
+  await expect(page.getByRole('table', { name: 'Cash available by account' })).toContainText('¥100,000')
+
   await page.getByRole('link', { name: 'Transfers' }).first().click()
   await page.getByRole('tab', { name: 'Card repayments' }).click()
   await page.getByRole('button', { name: 'New card repayment' }).click()
@@ -134,6 +138,11 @@ test('schedules a card purchase, reserves cash for it and repays it once', async
   await page.getByRole('dialog').getByRole('button', { name: 'Reserve money' }).click()
   await expect(page.getByText('¥8,000 reserved for the Sep 27, 2026 payment.')).toBeVisible()
   expect(balanceOfBank(state)).toBe(100000)
+  await page.getByRole('link', { name: 'Dashboard' }).first().click()
+  const available = page.getByRole('article', { name: 'Available after commitments' })
+  // ¥100,000 less ¥8,000 reserved and ¥16,000 of later installments still due, each counted once.
+  await expect(available).toContainText('¥76,000')
+  await page.goBack()
 
   await page.getByRole('button', { name: /^Record repayment for Sep 27, 2026/ }).click()
   dialog = page.getByRole('dialog', { name: 'Record repayment' })

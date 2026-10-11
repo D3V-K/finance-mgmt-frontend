@@ -182,6 +182,34 @@ on('POST', /^\/cards\/[^/]+\/schedules\/[^/]+\/payments$/, (route, { state, path
   return json(route, scheduleView(state, state.schedules.find((row) => row.id === scheduleId)!))
 })
 
+function cashRows(state: LedgerState) {
+  return state.accounts.filter((account) => LIQUID.includes(account.kind) && !account.archived_at).map((account) => {
+    const balance = balanceOf(state, account.id, state.today)
+    const reserved = state.reserves.filter((item) => item.account_id === account.id).reduce((sum, item) => sum + item.amount, 0)
+    const due = state.schedules.filter((row) => state.cardSettings[row.card_id]?.settlement_account_id === account.id).map((row) => scheduleView(state, row)).reduce((sum, row) => sum + Math.max(0, row.outstanding - row.funded_reserve), 0)
+    const raw = balance === null ? null : balance - reserved - due
+    return { account_id: account.id, liquid_balance: balance, funded_earmarks: reserved, unfunded_known_due: due, raw_available: raw, spendable: raw === null ? null : Math.max(0, raw), reserve_shortfall: due, coverage: balance === null ? 'unavailable' : 'complete' }
+  })
+}
+on('GET', /^\/dashboard$/, (route, { state }) => {
+  const rows = cashRows(state)
+  const withdrawals = state.schedules.map((row) => scheduleView(state, row)).filter((row) => row.outstanding > 0 && state.cardSettings[row.card_id]).map((row) => ({ account_id: state.cardSettings[row.card_id].settlement_account_id, date: row.due_date, amount: -row.outstanding, source: 'card_schedule', label: 'Card payment', certainty: row.source, id: row.id }))
+  const complete = rows.length > 0 && rows.every((row) => row.coverage === 'complete')
+  return json(route, {
+    as_of_date: state.today, currency: 'JPY', basis: 'canonical_accounts_only', cycle: { start: '2026-08-25', end_exclusive: '2026-09-25' }, cash_by_account: rows,
+    available_cash: { as_of_date: state.today, horizon: '2026-09-25', currency: 'JPY', accounts: rows, remaining_discretionary_budget: null, discretionary_budget_basis: 'active_payday_cycle_less_actual_and_linked_bills', coverage: complete ? 'complete' : 'incomplete', warnings: [] },
+    living_budget: { start: '2026-08-25', end_exclusive: '2026-09-25', currency: 'JPY', budgets: [], unknown_purchase_date_count: 0, coverage: 'known_dates_only' },
+    upcoming_withdrawals: withdrawals, lowest_projected_balance_by_account: {}, forecast_assumptions: [], forecast_coverage: 'partial_assumptions', buckets: [],
+    reserve_funding_shortfall: rows.reduce((sum, row) => sum + row.reserve_shortfall, 0),
+    financial_position: { as_of_date: state.today, currency: 'JPY', net_worth: null, coverage: 'incomplete', accounts: [], liquid_cash: null, brokerage_cash: null, securities_value: null, signed_card_balances: null, cumulative_contributions: 0, cumulative_withdrawals: 0, user_entered_realized_gain: 0, investment_return: null, valuation_change: null, valuation_change_basis: '', assumptions: [] },
+    data_quality: {}, warnings: complete ? [] : ['Available cash incomplete; confirm account openings and mapping'],
+  })
+})
+on('GET', /^\/reports\/cash-forecast$/, (route, { state, query }) => json(route, {
+  from: query.get('from'), to: query.get('to'), currency: 'JPY', scenario: 'baseline', coverage: 'partial_assumptions', warnings: [], assumptions: ['Same-day clearing order is unknown'], lowest_by_account: {},
+  days: cashRows(state).map((row) => ({ account_id: row.account_id, date: state.today, start_balance: row.liquid_balance, end_balance: row.liquid_balance, movements: [], intraday_order_uncertain: false, shortfall: false, coverage: row.coverage })),
+}))
+
 // Legacy screens still render on a full-ledger deployment.
 on('GET', /^\/opening-balances$/, (route) => json(route, []))
 on('GET', /^\/reports\/balance$/, (route) => json(route, { cash_balance: 0, bank_balance: 0, total_balance: 0 }))
