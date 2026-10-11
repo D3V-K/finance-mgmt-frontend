@@ -18,10 +18,31 @@ export const LEDGER_FEATURES = [
 export type LedgerFeature = (typeof LEDGER_FEATURES)[number]
 export type RolloutMode = 'legacy' | 'partial' | 'full'
 
+// Screens for a feature also read data owned by these features (cards list card
+// accounts and purchases, for example). A feature whose prerequisites are off
+// stays off, so a partial rollout never shows a page whose queries can't run.
+const PREREQUISITES: Record<LedgerFeature, LedgerFeature[]> = {
+  accounts: [],
+  events: ['accounts'],
+  cutover: ['accounts'],
+  'category-archive': [],
+  cards: ['accounts', 'events'],
+  budgets: ['accounts'],
+  forecast: ['accounts'],
+  dashboard: ['accounts', 'events', 'forecast'],
+  investments: ['accounts'],
+  reconciliation: ['accounts', 'events'],
+}
+
+function withPrerequisites(features: Iterable<LedgerFeature>) {
+  const requested = new Set(features)
+  return new Set([...requested].filter((feature) => PREREQUISITES[feature].every((required) => requested.has(required))))
+}
+
 export function parseFeatures(raw: string | undefined): Set<LedgerFeature> {
   const values = (raw ?? '').split(',').map((value) => value.trim()).filter(Boolean)
   if (values.includes('all')) return new Set(LEDGER_FEATURES)
-  return new Set(values.filter((value): value is LedgerFeature => (LEDGER_FEATURES as readonly string[]).includes(value)))
+  return withPrerequisites(values.filter((value): value is LedgerFeature => (LEDGER_FEATURES as readonly string[]).includes(value)))
 }
 
 let enabled = parseFeatures(import.meta.env.VITE_LEDGER_FEATURES)
@@ -49,5 +70,5 @@ export function requireFeature(feature: LedgerFeature) {
 
 /** Test-only override; production values come from VITE_LEDGER_FEATURES. */
 export function setEnabledFeatures(features: Iterable<LedgerFeature> | 'all' | 'none') {
-  enabled = features === 'all' ? new Set(LEDGER_FEATURES) : features === 'none' ? new Set() : new Set(features)
+  enabled = features === 'all' ? new Set(LEDGER_FEATURES) : features === 'none' ? new Set() : withPrerequisites(features)
 }

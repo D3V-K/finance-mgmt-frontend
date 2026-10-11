@@ -13,6 +13,26 @@ export function useFinancialEvents(filters: FinancialEventFilter = {}, enabled =
   return useQuery({ queryKey: ledgerKeys.events.list(filters), queryFn: () => eventsApi.list(filters), enabled: isFeatureEnabled('events') && enabled })
 }
 
+const COMPLETE_PAGE_SIZE = 100 // the API's maximum
+
+/**
+ * Every event matching the filters. Pickers and lookups need the complete set,
+ * so this walks all pages instead of trusting the first one.
+ */
+export function useAllFinancialEvents(filters: Omit<FinancialEventFilter, 'page' | 'page_size'> = {}, enabled = true) {
+  return useQuery({
+    queryKey: ledgerKeys.events.complete(filters),
+    queryFn: async () => {
+      const first = await eventsApi.list({ ...filters, page: 1, page_size: COMPLETE_PAGE_SIZE })
+      const items = [...first.items]
+      const pages = Math.ceil(first.total / first.page_size)
+      for (let page = 2; page <= pages; page += 1) items.push(...(await eventsApi.list({ ...filters, page, page_size: COMPLETE_PAGE_SIZE })).items)
+      return items
+    },
+    enabled: isFeatureEnabled('events') && enabled,
+  })
+}
+
 export function useFinancialEvent(id: UUID | undefined) {
   return useQuery({ queryKey: ledgerKeys.events.detail(id ?? ''), queryFn: () => eventsApi.get(id!), enabled: isFeatureEnabled('events') && Boolean(id) })
 }

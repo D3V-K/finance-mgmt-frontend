@@ -95,6 +95,22 @@ it('enters card statements as amounts owed and sends the server sign convention'
   expect(within(session).getByRole('button', { name: 'Confirm reconciliation' })).toBeEnabled()
 })
 
+it('does not start a check until this period’s activity has loaded', async () => {
+  const drafts: unknown[] = []
+  server.use(
+    http.get('*/accounts/:id/statement-balance', () => HttpResponse.json({ detail: 'Temporarily unavailable' }, { status: 503 })),
+    http.post('*/reconciliations', async ({ request }) => { drafts.push(await request.json()); return HttpResponse.json(baseSession, { status: 201 }) }),
+  )
+  const user = userEvent.setup()
+  renderReview()
+  await user.selectOptions(await screen.findByLabelText('Account'), 'acct-bank')
+  await user.type(screen.getByLabelText('Statement opening balance (JPY)'), '100000')
+  await user.type(screen.getByLabelText('Statement closing balance (JPY)'), '93500')
+  expect(await screen.findByText(/Could not load this period’s activity/)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Start check' })).toBeDisabled()
+  expect(drafts).toEqual([])
+})
+
 it('requires a reason for a balance adjustment and does not duplicate it on retry', async () => {
   const keys: string[] = []
   useReconciliationApi()

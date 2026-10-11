@@ -50,6 +50,14 @@ describe('rollout gating', () => {
     setEnabledFeatures('all'); expect(rolloutMode()).toBe('full')
   })
 
+  it('keeps a feature off until the features its screens read from are on', () => {
+    expect([...parseFeatures('cards')]).toEqual([])
+    expect([...parseFeatures('accounts,cards')]).toEqual(['accounts'])
+    expect([...parseFeatures('accounts,events,cards')]).toEqual(['accounts', 'events', 'cards'])
+    expect([...parseFeatures('accounts,events,dashboard')]).toEqual(['accounts', 'events'])
+    setEnabledFeatures(['cards']); expect(rolloutMode()).toBe('legacy')
+  })
+
   it('never requests a new endpoint while its feature is disabled', async () => {
     const requests: string[] = []
     server.events.on('request:start', ({ request }) => { requests.push(new URL(request.url).pathname) })
@@ -75,7 +83,7 @@ describe('query keys', () => {
   })
 
   it('requests a scenario forecast only for the explicit scenario key', async () => {
-    setEnabledFeatures(['forecast'])
+    setEnabledFeatures(['accounts', 'forecast'])
     const scenarios: Array<string | null> = []
     server.use(http.get('*/reports/cash-forecast', ({ request }) => { scenarios.push(new URL(request.url).searchParams.get('scenario')); return HttpResponse.json({ days: [] }) }))
     const { wrapper } = setup()

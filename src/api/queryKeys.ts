@@ -17,6 +17,7 @@ export const ledgerKeys = {
   events: {
     all: ['financial-events'] as const,
     list: (filters: FinancialEventFilter) => ['financial-events', 'list', filters] as const,
+    complete: (filters: FinancialEventFilter) => ['financial-events', 'complete', filters] as const,
     detail: (id: UUID) => ['financial-events', 'detail', id] as const,
   },
   cutover: {

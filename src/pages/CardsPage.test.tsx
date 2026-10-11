@@ -89,6 +89,42 @@ it('splits one purchase into three installments without creating any expense', a
   expect(writes).toEqual(['2026-10-31', '2026-11-30', '2026-12-31'].map((due_date) => ({ path: '/api/cards/acct-card/schedules', body: { due_date, principal_due: 8000, source: 'estimate', purchase_event_id: 'purchase-tv' } })))
 })
 
+it('refuses a plan with more payments than yen instead of sending a zero-yen payment', async () => {
+  const writes = api()
+  const user = userEvent.setup()
+  renderCards('/cards/acct-card')
+  await user.click(await screen.findByRole('button', { name: 'Add payment dates' }))
+  const dialog = screen.getByRole('dialog')
+  await user.click(within(dialog).getByLabelText('Debt that was already owed on the start date'))
+  await user.type(within(dialog).getByLabelText('Description of the debt'), 'Balance on start date')
+  await user.type(within(dialog).getByLabelText('Total to repay (JPY)'), '1')
+  await user.clear(within(dialog).getByLabelText('Number of payments'))
+  await user.type(within(dialog).getByLabelText('Number of payments'), '2')
+  await user.type(within(dialog).getByLabelText('First due date'), '2026-10-27')
+  expect(within(dialog).queryByRole('table')).not.toBeInTheDocument()
+  await user.click(within(dialog).getByRole('button', { name: 'Add payment dates' }))
+  expect(await within(dialog).findByText(/¥1 can’t be split into 2 payments/)).toBeInTheDocument()
+  expect(writes).toEqual([])
+})
+
+it('offers purchases beyond the first page of results', async () => {
+  api()
+  const older = eventFixture({ id: 'purchase-old', amount: 5000, description: 'Older purchase', occurred_on: '2026-01-05', postings: [{ account_id: 'acct-card', delta: -5000, effective_date: '2026-01-05' }] })
+  const pages: string[] = []
+  server.use(http.get('*/financial-events', ({ request }) => {
+    const params = new URL(request.url).searchParams
+    if (params.get('kind') !== 'EXPENSE') return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 100 })
+    const page = Number(params.get('page'))
+    pages.push(`${page}:${params.get('page_size')}`)
+    return HttpResponse.json({ items: [page === 1 ? purchase : older], total: 101, page, page_size: 100 })
+  }))
+  const user = userEvent.setup()
+  renderCards('/cards/acct-card')
+  await user.click(await screen.findByRole('button', { name: 'Add payment dates' }))
+  expect(within(screen.getByRole('dialog')).getByRole('option', { name: /Older purchase/ })).toBeInTheDocument()
+  expect(pages).toEqual(['1:100', '2:100'])
+})
+
 it('reserves existing money without moving it and explains insufficient cash', async () => {
   const writes = api()
   const user = userEvent.setup()

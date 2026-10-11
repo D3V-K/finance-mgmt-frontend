@@ -42,7 +42,7 @@ export default function App() {
             <Route path="savings" element={<FeatureRoute feature="budgets"><SavingsPage /></FeatureRoute>} />
             <Route path="investments" element={<FeatureRoute feature="investments"><InvestmentsPage /></FeatureRoute>} />
             <Route path="review" element={<FeatureRoute feature="reconciliation"><ReviewPage /></FeatureRoute>} />
-            <Route path="setup/migration" element={<FeatureRoute feature="cutover"><FeatureRoute feature="accounts"><MigrationPage /></FeatureRoute></FeatureRoute>} />
+            <Route path="setup/migration" element={<FeatureRoute feature="cutover"><MigrationPage /></FeatureRoute>} />
             <Route path="categories" element={<CategoriesPage />} />
             <Route path="reports" element={<ReportsPage />} />
             <Route path="*" element={<NotFoundPage />} />

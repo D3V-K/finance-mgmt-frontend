@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { normalizeApiError } from '@/api/errors'
 import { useAccountBalance, useAccounts, useEntryOptions } from '@/api/hooks/accounts'
 import { useCardSchedules, useCardSettings, useCardStatements, useConfirmCardStatement, useCreateCardSchedule, useFundCardReserve, useLinkCardPayment, useLinkCardRefund, useSaveCardSettings, useUpdateCardSchedule } from '@/api/hooks/cards'
-import { useFinancialEvents } from '@/api/hooks/events'
+import { useAllFinancialEvents } from '@/api/hooks/events'
 import { useSingleFlight } from '@/api/idempotency'
 import type { Account, CardSchedule, CardStatementGroup, EntryOptions, FinancialEvent, ISODate } from '@/api/types'
 import { StatusBadge } from '@/components/finance/Amount'
@@ -115,8 +115,10 @@ function ScheduleForm({ card, purchases, onDone }: { card: Account; purchases: F
   const totalValue = source === 'purchase' && purchase && !total ? purchase.amount : Number(total)
   const installments = WHOLE.test(count) && Number(count) >= 1 && Number(count) <= 36 ? Number(count) : 0
   // Equal installments; any remainder yen goes on the first payment so the parts add up exactly.
+  // Each payment must be at least ¥1, so a total smaller than the count has no valid plan.
+  const tooManyPayments = installments > 0 && totalValue > 0 && totalValue < installments
   const plan = useMemo(() => {
-    if (!installments || !(totalValue > 0) || !isValidISODate(firstDue)) return []
+    if (!installments || !(totalValue >= installments) || !isValidISODate(firstDue)) return []
     const base = Math.floor(totalValue / installments)
     const [year, month, day] = firstDue.split('-').map(Number)
     return Array.from({ length: installments }, (_, index) => {
@@ -130,6 +132,7 @@ function ScheduleForm({ card, purchases, onDone }: { card: Account; purchases: F
     event.preventDefault()
     if (source === 'purchase' && !purchase) { setError('Choose the purchase these payments are for.'); return }
     if (source === 'opening' && !label.trim()) { setError('Describe the existing debt, for example “Balance on start date”.'); return }
+    if (tooManyPayments) { setError(`${formatJPY(totalValue)} can’t be split into ${installments} payments of at least ¥1. Use fewer payments.`); return }
     if (!plan.length) { setError('Enter the amount, number of payments (1–36) and a valid first due date.'); return }
     void once(async () => {
       setError('')
@@ -276,17 +279,17 @@ function CardDetail({ card, options, accounts }: { card: Account; options: Entry
   const settings = useCardSettings(card.id)
   const schedules = useCardSchedules(card.id)
   const statements = useCardStatements(card.id)
-  const purchases = useFinancialEvents({ account_id: card.id, kind: 'EXPENSE', page_size: 100 })
-  const repayments = useFinancialEvents({ account_id: card.id, kind: 'CARD_REPAYMENT', page_size: 100 })
-  const refunds = useFinancialEvents({ account_id: card.id, kind: 'REFUND', page_size: 100 })
+  const purchases = useAllFinancialEvents({ account_id: card.id, kind: 'EXPENSE' })
+  const repayments = useAllFinancialEvents({ account_id: card.id, kind: 'CARD_REPAYMENT' })
+  const refunds = useAllFinancialEvents({ account_id: card.id, kind: 'REFUND' })
   const linkPayment = useLinkCardPayment()
   const [dialog, setDialog] = useState<CardDialog | null>(null)
   const [feedback, setFeedback] = useState<{ text: string; error: boolean } | null>(null)
   const active = accounts.filter((account) => account.archived_at === null)
   const banks = active.filter((account) => account.kind === 'BANK')
   const liquid = active.filter((account) => account.kind !== 'CREDIT_CARD')
-  const purchaseMap = new Map((purchases.data?.items ?? []).map((item) => [item.id, item]))
-  const openPurchases = (purchases.data?.items ?? []).filter((item) => !item.is_reversal)
+  const purchaseMap = new Map((purchases.data ?? []).map((item) => [item.id, item]))
+  const openPurchases = (purchases.data ?? []).filter((item) => !item.is_reversal)
   const linkError = useRef<string | null>(null)
   const close = (text?: string) => {
     setDialog(null)
@@ -358,7 +361,7 @@ function CardDetail({ card, options, accounts }: { card: Account; options: Entry
       {dialog?.type === 'pay' && <EventForm mode="repayment" options={options} defaults={{ account_id: settings.data?.settlement_account_id ?? '', destination_account_id: card.id, amount: String(dialog.schedule.outstanding), date: dialog.schedule.due_date <= options.local_today ? dialog.schedule.due_date : options.local_today }} onCreated={onRepaymentCreated(dialog.schedule)} onDone={close} />}
       {dialog?.type === 'reserve' && <ReserveForm card={card} schedule={dialog.schedule} defaultAccount={settings.data?.settlement_account_id} liquid={liquid} today={options.local_today} onDone={close} />}
       {dialog?.type === 'reschedule' && <RescheduleForm card={card} schedule={dialog.schedule} onDone={close} />}
-      {dialog?.type === 'link' && <LinkForm card={card} schedule={dialog.schedule} kind={dialog.kind} candidates={dialog.kind === 'payment' ? (repayments.data?.items ?? []).filter((item) => !item.is_reversal) : (refunds.data?.items ?? []).filter((item) => !item.is_reversal && item.original_event_id === dialog.schedule.purchase_event_id)} onDone={close} />}
+      {dialog?.type === 'link' && <LinkForm card={card} schedule={dialog.schedule} kind={dialog.kind} candidates={dialog.kind === 'payment' ? (repayments.data ?? []).filter((item) => !item.is_reversal) : (refunds.data ?? []).filter((item) => !item.is_reversal && item.original_event_id === dialog.schedule.purchase_event_id)} onDone={close} />}
       {dialog?.type === 'statement' && <StatementForm card={card} group={dialog.group} onDone={close} />}
     </Dialog>
   </div>

@@ -2,7 +2,7 @@ import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { normalizeApiError } from '@/api/errors'
 import { useAccounts, useEntryOptions } from '@/api/hooks/accounts'
-import { useCreateFinancialEvent, useFinancialEvents } from '@/api/hooks/events'
+import { useAllFinancialEvents, useCreateFinancialEvent } from '@/api/hooks/events'
 import { useConfirmReconciliation, useDraftReconciliation, useIncludePosting, useLedgerExport, useLedgerQuality, useReconciliation, useReopenReconciliation, useStatementBalance } from '@/api/hooks/reconciliation'
 import { useIdempotencyKey, useSingleFlight } from '@/api/idempotency'
 import type { Account, EntryOptions, FinancialEvent, ISODate, LedgerQuality, Reconciliation } from '@/api/types'
@@ -78,17 +78,20 @@ function StartForm({ accounts, initialAccount, today, onStarted }: { accounts: A
   const isCard = account?.kind === 'CREDIT_CARD'
   const validRange = isValidISODate(from) && isValidISODate(to) && from <= to
   const statement = useStatementBalance(accountId || undefined, validRange ? from : undefined, validRange ? to : undefined)
-  const events = useFinancialEvents({ account_id: accountId, from, to, page_size: 100 }, Boolean(accountId) && validRange)
-  const lookup = useMemo(() => describePostings(events.data?.items ?? [], accountId), [accountId, events.data])
+  const events = useAllFinancialEvents({ account_id: accountId, from, to }, Boolean(accountId) && validRange)
+  const lookup = useMemo(() => describePostings(events.data ?? [], accountId), [accountId, events.data])
   const toSigned = (value: string) => isCard ? -Number(value) : Number(value)
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (!account || !validRange || !WHOLE.test(opening) || !WHOLE.test(closing)) { setError('Choose an account, a valid period and the statement’s opening and closing amounts in whole yen.'); return }
+    // The user must see (and be able to untick) this period's activity before a check starts.
+    const preview = statement.data
+    if (!preview) { setError('Wait for this period’s activity to load, then check what’s on the statement.'); return }
     void once(async () => {
       setError('')
       try {
-        const selected = (statement.data?.postings ?? []).map((posting) => posting.id).filter((id) => !excluded.has(id))
-        onStarted(await draft.mutateAsync({ account_id: account.id, period_start: from, period_end: to, statement_opening: toSigned(opening), statement_closing: toSigned(closing), selected_posting_ids: statement.data ? selected : null }))
+        const selected = preview.postings.map((posting) => posting.id).filter((id) => !excluded.has(id))
+        onStarted(await draft.mutateAsync({ account_id: account.id, period_start: from, period_end: to, statement_opening: toSigned(opening), statement_closing: toSigned(closing), selected_posting_ids: selected }))
       } catch (cause) {
         const apiError = normalizeApiError(cause)
         setError(apiError.kind === 'conflict' ? 'This statement period has already been started. Open it from “Things to review”, or reopen it there if it was confirmed.' : apiError.message)
@@ -118,7 +121,7 @@ function StartForm({ accounts, initialAccount, today, onStarted }: { accounts: A
           <td className="py-2 pr-3"><Amount value={statementFigure(account, posting.amount)} /></td>
         </tr> })}</tbody></table></div>}
     </div>)}
-    <Button type="submit" loading={draft.isPending} disabled={!accountId}>Start check</Button>
+    <Button type="submit" loading={draft.isPending} disabled={!accountId || (validRange && !statement.isSuccess)}>Start check</Button>
   </form>
 }
 
@@ -170,8 +173,8 @@ function SessionView({ id, accounts, options, onClose }: { id: string; accounts:
   const [feedback, setFeedback] = useState<{ text: string; error: boolean } | null>(null)
   const data = session.data
   const account = data ? accounts.get(data.account_id) : undefined
-  const events = useFinancialEvents({ account_id: data?.account_id, page_size: 100 }, Boolean(data))
-  const lookup = useMemo(() => describePostings(events.data?.items ?? [], data?.account_id ?? ''), [data?.account_id, events.data])
+  const events = useAllFinancialEvents({ account_id: data?.account_id }, Boolean(data))
+  const lookup = useMemo(() => describePostings(events.data ?? [], data?.account_id ?? ''), [data?.account_id, events.data])
   const run = (work: () => Promise<unknown>, success: string) => void once(async () => {
     setFeedback(null)
     try { await work(); setFeedback({ text: success, error: false }) }
