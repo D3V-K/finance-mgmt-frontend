@@ -8,6 +8,10 @@ type Props = SelectHTMLAttributes<HTMLSelectElement> & {
   error?: string
   type?: CategoryType
   placeholder?: string
+  /** An entry's existing category stays selectable (and labelled) even after it is archived. */
+  keepId?: string | null
+  /** Filters over history include archived categories. */
+  showArchived?: boolean
 }
 
 // Keep parents before children even when the API list is unordered. Full paths
@@ -38,13 +42,15 @@ function categoryOptions(categories: Category[]) {
   return result
 }
 
-export const CategorySelect = forwardRef<HTMLSelectElement, Props>(function CategorySelect({ categories, label, error, type, placeholder = 'Select a category', id = 'category', ...props }, ref) {
+export const CategorySelect = forwardRef<HTMLSelectElement, Props>(function CategorySelect({ categories, label, error, type, placeholder = 'Select a category', id = 'category', keepId, showArchived = false, ...props }, ref) {
+  // Archived categories are hidden from new entries; history keeps the one it already uses.
+  const selectable = showArchived ? categories : categories.filter((category) => !category.archived_at || category.id === keepId)
   return <Select ref={ref} id={id} label={label} error={error} {...props}>
     <option value="">{placeholder}</option>
     {(['income', 'expense'] as const).filter((group) => !type || type === group).map((group) => {
-      const options = categoryOptions(categories.filter((category) => category.type === group))
+      const options = categoryOptions(selectable.filter((category) => category.type === group))
       return options.length > 0 && <optgroup key={group} label={group === 'income' ? 'Income' : 'Expenses'}>
-        {options.map(({ category, label: path }) => <option key={category.id} value={category.id}>{path}</option>)}
+        {options.map(({ category, label: path }) => <option key={category.id} value={category.id}>{path}{category.archived_at ? ' (archived)' : ''}</option>)}
       </optgroup>
     })}
   </Select>

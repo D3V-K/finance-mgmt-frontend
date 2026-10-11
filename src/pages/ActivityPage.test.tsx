@@ -181,7 +181,7 @@ it('keeps archived categories and unknown purchase dates visible on history with
   renderPage()
   const row = (await screen.findByRole('cell', { name: 'Imported card bill' })).closest('tr')!
   expect(await within(row).findByText('Old hobby')).toBeInTheDocument()
-  expect(within(row).getByText('(archived)')).toBeInTheDocument()
+  expect(within(row).getByText('· archived')).toBeInTheDocument()
   expect(within(row).getByText('Purchase date unknown')).toBeInTheDocument()
   expect(within(row).getByText('Posted Aug 27, 2026')).toBeInTheDocument()
   await user.click(screen.getByRole('button', { name: 'Record purchase' }))

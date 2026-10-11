@@ -67,7 +67,7 @@ export function EventTable({ events, caption, onCorrect, onRefund }: { events: F
         <td className="whitespace-nowrap px-4 py-3"><PurchaseDate occurredOn={event.occurred_on} basis={event.date_basis} />{posted && posted !== event.occurred_on && <p className="mt-1 text-xs text-slate-500">Posted {formatDate(posted)}</p>}</td>
         <td className="px-4 py-3"><span className="font-medium">{eventKindLabel[event.kind]}</span>{linked && <div className="mt-1"><StatusBadge tone="muted">{linked}</StatusBadge></div>}</td>
         <td className="px-4 py-3">{describeAccounts(event, accountMap)}</td>
-        <td className="px-4 py-3">{category ? <span className="inline-flex flex-wrap items-center gap-1"><CategoryBadge category={category} />{category.archived_at && <span className="text-xs text-slate-500">(archived)</span>}</span> : event.category_id ? <span className="text-slate-500">Unknown category</span> : <span className="text-slate-400">—</span>}</td>
+        <td className="px-4 py-3">{category ? <CategoryBadge category={category} /> : event.category_id ? <span className="text-slate-500">Unknown category</span> : <span className="text-slate-400">—</span>}</td>
         <td className="max-w-xs break-words px-4 py-3 text-slate-700">{event.description || <span className="text-slate-400">—</span>}</td>
         <td className="whitespace-nowrap px-4 py-3 text-right font-semibold"><AmountCell event={event} /></td>
         <td className="whitespace-nowrap px-4 py-3">{!event.is_reversal && <div className="flex gap-1">
@@ -119,7 +119,7 @@ export function ActivityPage() {
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
       <Select id="filter-kind" label="Entry type" value={params.get('kind') ?? ''} onChange={(event) => updateFilter('kind', event.target.value)}><option value="">All entries</option>{KINDS.map((kind) => <option key={kind} value={kind}>{eventKindLabel[kind]}</option>)}</Select>
       <Select id="filter-account" label="Account" value={params.get('account_id') ?? ''} onChange={(event) => updateFilter('account_id', event.target.value)}><option value="">All accounts</option>{(accounts.data ?? []).map((account) => <option key={account.id} value={account.id}>{account.name}{account.archived_at ? ' (archived)' : ''}</option>)}</Select>
-      <CategorySelect id="filter-category" label="Category" categories={categories.data ?? []} placeholder="All categories" value={params.get('category_id') ?? ''} onChange={(event) => updateFilter('category_id', event.target.value)} />
+      <CategorySelect id="filter-category" label="Category" showArchived categories={categories.data ?? []} placeholder="All categories" value={params.get('category_id') ?? ''} onChange={(event) => updateFilter('category_id', event.target.value)} />
       <Input id="filter-from" label="Purchase date from" type="date" value={params.get('from') ?? ''} onChange={(event) => updateFilter('from', event.target.value)} />
       <Input id="filter-to" label="Purchase date to" type="date" value={params.get('to') ?? ''} onChange={(event) => updateFilter('to', event.target.value)} />
     </div>{hasFilters && <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-slate-500">{params.has('from') || params.has('to') ? 'Date filters use the purchase date, so entries with an unknown purchase date are not included.' : ''}</p><Button variant="ghost" onClick={() => setParams({}, { replace: true })}>Clear filters</Button></div>}</div>

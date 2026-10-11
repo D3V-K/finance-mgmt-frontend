@@ -77,6 +77,10 @@ Playwright runs two projects: `chromium` against a legacy-only build and `ledger
 
 With `events` enabled, `/transactions` records canonical entries: a purchase needs only an amount, an active account or card, a category and the purchase date, defaulting to the server's local today, the user's default account and their most recent category. A card purchase is explained up front: it counts as spending now and adds to the amount owed, and the bank balance changes only when the repayment is recorded. Income, refunds (linked to the original purchase), card repayments (no category, dated when money moved) and transfers each have their own form. `/transfers` shows transfers and card repayments as separate tabs, never mixed with purchases. Every write sends an idempotency key, so a retry after a lost response cannot record twice. Posted entries are never edited or deleted: "Correct" offers a linked replacement or a reversal, and both keep the original visible. History shows purchase-date quality, posting dates and archived account or category names. Filters and pagination are server-side URL parameters. Earlier Cash/Bank records stay available read-only at `?view=earlier`. Without the flag, the original Cash/Bank screens are unchanged.
 
+### Category archival (`category-archive`)
+
+Archive is the normal way to retire a category: past entries and report totals keep it, and new-entry selectors stop offering it. Delete is only offered for leaf categories, and the server decides whether one was ever used; a 409 explains why and offers "Archive instead". Archival is not recursive, so subcategories stay as they are. A type change that the server refuses for a used category keeps the form and explains why. "Show archived categories" lists retired categories for review and restore. History views and filters still resolve archived names, and an existing entry keeps its archived category when opened.
+
 ## Architecture
 
 ### Static Hosting (S3 + CloudFront)
