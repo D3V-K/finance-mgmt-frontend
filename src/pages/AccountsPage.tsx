@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { normalizeApiError } from '@/api/errors'
 import { useAccountBalance, useAccountOpening, useAccountOpeningRevisions, useAccounts, useCreateAccount, useEntryOptions, useFinanceSettings, useSaveFinanceSettings, useSetAccountOpening, useUpdateAccount } from '@/api/hooks/accounts'
 import { useSingleFlight } from '@/api/idempotency'
@@ -9,6 +10,7 @@ import { Button } from '@/components/ui/Button'
 import { Dialog } from '@/components/ui/Dialog'
 import { Alert, EmptyState, Skeleton } from '@/components/ui/Feedback'
 import { Input, Select } from '@/components/ui/FormControls'
+import { isFeatureEnabled } from '@/config/features'
 import { ACCOUNT_KINDS, accountKindGroupLabel, accountKindLabel, cardAmountToSigned, cardBalanceParts, signedToCardAmount, type CardBalanceSide } from '@/utils/accounts'
 import { formatDate, formatJPY } from '@/utils/format'
 import { isValidISODate, tokyoToday } from '@/utils/reporting'
@@ -119,6 +121,7 @@ function AccountRow({ account, asOf, onRename, onOpening, onArchive }: { account
     <BalanceCell account={account} asOf={asOf} />
     <div className="flex w-full flex-wrap gap-1 sm:w-auto">
       {!archived && <Button variant="ghost" className="px-3" disabled={opening.isLoading || opening.isError} onClick={() => onOpening(opening.data ?? null)}>{opening.data ? 'Correct opening balance' : 'Set opening balance'}<span className="sr-only"> for {account.name}</span></Button>}
+      {account.kind === 'CREDIT_CARD' && isFeatureEnabled('cards') && <Link to={`/cards/${account.id}`} className="inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-semibold text-indigo-700 hover:bg-slate-100">Payments<span className="sr-only"> for {account.name}</span></Link>}
       <Button variant="ghost" className="px-3" onClick={onRename}>Rename<span className="sr-only"> {account.name}</span></Button>
       <Button variant="ghost" className="px-3" onClick={onArchive}>{archived ? 'Restore' : 'Archive'}<span className="sr-only"> {account.name}</span></Button>
     </div>

@@ -81,6 +81,10 @@ With `events` enabled, `/transactions` records canonical entries: a purchase nee
 
 Archive is the normal way to retire a category: past entries and report totals keep it, and new-entry selectors stop offering it. Delete is only offered for leaf categories, and the server decides whether one was ever used; a 409 explains why and offers "Archive instead". Archival is not recursive, so subcategories stay as they are. A type change that the server refuses for a used category keeps the form and explains why. "Show archived categories" lists retired categories for review and restore. History views and filters still resolve archived names, and an existing entry keeps its archived category when opened.
 
+### Cards (`cards`)
+
+`/cards` shows each card's amount owed (or credit balance), its next withdrawal with an estimated or confirmed date, the money reserved for it, and any shortfall. All of these are server figures. `/cards/:id` adds the settlement bank and closing/payment days, upcoming withdrawals grouped by due date (a statement total equals the payment dates it covers and is never added on top of them), and the payment dates themselves. A purchase or existing opening debt can be split into installments: it was counted as spending once, and payment dates only spread the repayment. "Reserve" earmarks existing cash without moving money, and an insufficient-cash refusal is explained without changing anything. "Record repayment" posts one card-repayment movement and links it to the schedule, which consumes the matching reserve once. A repayment that was recorded but could not be linked is reported and can be applied later. Refunds of the purchase can be applied to reduce what is due. An estimated date that passes is never marked paid automatically.
+
 ## Architecture
 
 ### Static Hosting (S3 + CloudFront)

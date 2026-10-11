@@ -22,6 +22,10 @@ export function createLedgerState() {
     legacyTransactions: [] as Array<Json & { id: string; transaction_date: string; amount: number; category_id: string }>,
     legacyTransfers: [] as Array<Json & { id: string; transfer_date: string; amount: number }>,
     cutover: null as null | { as_of_date: string; unresolved: Array<{ source_table: string; source_id: string; recorded_date: string; amount: number; category_id: string | null }>; request: string },
+    cardSettings: {} as Record<string, { settlement_account_id: string; closing_day: number; payment_day: number }>,
+    schedules: [] as Array<{ id: string; card_id: string; purchase_event_id: string | null; opening_obligation: string | null; due_date: string; principal_due: number; source: string }>,
+    schedulePayments: [] as Array<{ schedule_id: string; amount: number }>,
+    reserves: [] as Array<{ schedule_id: string | null; account_id: string; amount: number }>,
     counter: 0,
   }
 }
@@ -136,6 +140,46 @@ on('GET', /^\/financial-events$/, (route, { state, query }) => {
 on('GET', /^\/reports\/canonical-(monthly|by-category)$/, (route, { state, path }) => {
   const spending = state.events.filter((event) => event.kind === 'EXPENSE').reduce((sum, event) => sum + event.amount, 0)
   return json(route, path.endsWith('monthly') ? [{ month: '2026-09-01', income: 0, gross_spending: spending, refunds: 0, net_spending: spending, date_basis: 'known_only' }] : [])
+})
+
+function scheduleView(state: LedgerState, row: LedgerState['schedules'][number]) {
+  const paid = state.schedulePayments.filter((item) => item.schedule_id === row.id).reduce((sum, item) => sum + item.amount, 0)
+  const funded = state.reserves.filter((item) => item.schedule_id === row.id).reduce((sum, item) => sum + item.amount, 0)
+  const outstanding = row.principal_due - paid
+  return { ...row, statement_id: null, paid, refunded: 0, outstanding, status: outstanding === 0 ? 'paid' : paid ? 'partially_paid' : 'planned', funded_reserve: funded, unfunded: Math.max(0, outstanding - funded) }
+}
+const cardId = (path: string) => path.split('/')[2]
+on('GET', /^\/cards\/[^/]+\/settings$/, (route, { state, path }) => state.cardSettings[cardId(path)] ? json(route, { card_id: cardId(path), ...state.cardSettings[cardId(path)] }) : json(route, { detail: 'Card settings not configured' }, 404))
+on('PUT', /^\/cards\/[^/]+\/settings$/, (route, { state, path, body }) => { state.cardSettings[cardId(path)] = body as never; return json(route, body) })
+on('GET', /^\/cards\/[^/]+\/schedules$/, (route, { state, path }) => json(route, state.schedules.filter((row) => row.card_id === cardId(path)).map((row) => scheduleView(state, row))))
+on('POST', /^\/cards\/[^/]+\/schedules$/, (route, { state, path, body }) => {
+  const row = { id: nextId(state, 'schedule'), card_id: cardId(path), purchase_event_id: (body.purchase_event_id as string) ?? null, opening_obligation: (body.opening_obligation as string) ?? null, due_date: String(body.due_date), principal_due: Number(body.principal_due), source: String(body.source ?? 'estimate') }
+  state.schedules.push(row)
+  return json(route, scheduleView(state, row), 201)
+})
+on('GET', /^\/cards\/[^/]+\/statements$/, (route, { state, path }) => {
+  const groups = new Map<string, Json & { principal_due: number; outstanding: number; funded_reserve: number; schedule_ids: string[] }>()
+  for (const row of state.schedules.filter((item) => item.card_id === cardId(path)).map((item) => scheduleView(state, item))) {
+    const group = groups.get(row.due_date) ?? { due_date: row.due_date, principal_due: 0, outstanding: 0, funded_reserve: 0, schedule_ids: [], source: 'estimate', statement_id: null, closing_on: null }
+    group.principal_due += row.principal_due; group.outstanding += row.outstanding; group.funded_reserve += row.funded_reserve; group.schedule_ids.push(row.id)
+    groups.set(row.due_date, group)
+  }
+  return json(route, [...groups.values()])
+})
+on('POST', /^\/cards\/[^/]+\/schedules\/[^/]+\/reserve$/, (route, { state, path, body }) => {
+  const scheduleId = path.split('/')[4]
+  const reserved = state.reserves.filter((item) => item.account_id === body.account_id).reduce((sum, item) => sum + item.amount, 0)
+  if ((balanceOf(state, String(body.account_id), state.today) ?? 0) - reserved < Number(body.amount)) return json(route, { detail: 'Insufficient unallocated cash' }, 409)
+  state.reserves.push({ schedule_id: scheduleId, account_id: String(body.account_id), amount: Number(body.amount) })
+  return json(route, scheduleView(state, state.schedules.find((row) => row.id === scheduleId)!))
+})
+on('POST', /^\/cards\/[^/]+\/schedules\/[^/]+\/payments$/, (route, { state, path, body }) => {
+  const scheduleId = path.split('/')[4]
+  state.schedulePayments.push({ schedule_id: scheduleId, amount: Number(body.amount) })
+  // Paying consumes the matching reserve once.
+  const reserve = state.reserves.find((item) => item.schedule_id === scheduleId)
+  if (reserve) reserve.amount = Math.max(0, reserve.amount - Number(body.amount))
+  return json(route, scheduleView(state, state.schedules.find((row) => row.id === scheduleId)!))
 })
 
 // Legacy screens still render on a full-ledger deployment.

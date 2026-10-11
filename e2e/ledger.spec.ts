@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { mockLedgerApi, signIn } from './ledgerApi'
+import { balanceOf, mockLedgerApi, signIn } from './ledgerApi'
 
 test.beforeEach(({ page }) => { page.on('pageerror', (error) => console.error(`Browser error: ${error.message}`)) })
 
@@ -107,3 +107,44 @@ test('records a card purchase immediately and repays it later without a second e
   await expect(page.getByText('Amount owed ¥0')).toBeVisible()
   expect(state.events.filter((event) => event.kind === 'EXPENSE')).toHaveLength(1)
 })
+
+test('schedules a card purchase, reserves cash for it and repays it once', async ({ page }) => {
+  const state = await mockLedgerApi(page)
+  state.accounts.push(
+    { id: 'acct-bank', user_id: 'e2e-user', name: 'Everyday Bank', kind: 'BANK', currency: 'JPY', archived_at: null, created_at: '', updated_at: '' },
+    { id: 'acct-card', user_id: 'e2e-user', name: 'Rewards Card', kind: 'CREDIT_CARD', currency: 'JPY', archived_at: null, created_at: '', updated_at: '' },
+  )
+  state.openings['acct-bank'] = { amount: 100000, as_of_date: '2026-09-01', revision: 1 }
+  state.openings['acct-card'] = { amount: 0, as_of_date: '2026-09-01', revision: 1 }
+  state.cardSettings['acct-card'] = { settlement_account_id: 'acct-bank', closing_day: 15, payment_day: 27 }
+  state.events.push({ id: 'purchase-1', kind: 'EXPENSE', amount: 24000, category_id: 'cat-groceries', description: 'Television', occurred_on: '2026-09-05', date_basis: 'known', recorded_at: '2026-09-05T10:00:00', is_reversal: false, original_event_id: null, reverses_event_id: null, replaces_event_id: null, postings: [{ id: 'p1', account_id: 'acct-card', delta: -24000, effective_date: '2026-09-05' }] })
+  await signIn(page)
+  await page.getByRole('link', { name: 'Cards' }).first().click()
+  await page.getByRole('link', { name: /Payments and schedules/ }).click()
+
+  await page.getByRole('button', { name: 'Add payment dates' }).click()
+  let dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Purchase', { exact: true }).selectOption('purchase-1')
+  await dialog.getByLabel('Number of payments').fill('3')
+  await dialog.getByLabel('First due date').fill('2026-09-27')
+  await dialog.getByRole('button', { name: 'Add payment dates' }).click()
+  await expect(page.getByText('3 payment dates added.')).toBeVisible()
+
+  await page.getByRole('button', { name: /^Reserve for Sep 27, 2026/ }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Reserve money' }).click()
+  await expect(page.getByText('¥8,000 reserved for the Sep 27, 2026 payment.')).toBeVisible()
+  expect(balanceOfBank(state)).toBe(100000)
+
+  await page.getByRole('button', { name: /^Record repayment for Sep 27, 2026/ }).click()
+  dialog = page.getByRole('dialog', { name: 'Record repayment' })
+  await dialog.getByRole('button', { name: 'Record card repayment' }).click()
+  await expect(page.getByText('Card repayment recorded.')).toBeVisible()
+  await expect(page.getByRole('table', { name: 'Card payment dates' }).locator('span', { hasText: /^Paid$/ })).toBeVisible()
+  expect(balanceOfBank(state)).toBe(92000)
+  expect(state.events.filter((event) => event.kind === 'EXPENSE')).toHaveLength(1)
+  expect(state.reserves[0].amount).toBe(0)
+})
+
+function balanceOfBank(state: Awaited<ReturnType<typeof mockLedgerApi>>) {
+  return balanceOf(state, 'acct-bank', '2026-09-30')
+}
