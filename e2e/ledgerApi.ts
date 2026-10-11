@@ -26,6 +26,7 @@ export function createLedgerState() {
     schedules: [] as Array<{ id: string; card_id: string; purchase_event_id: string | null; opening_obligation: string | null; due_date: string; principal_due: number; source: string }>,
     schedulePayments: [] as Array<{ schedule_id: string; amount: number }>,
     reserves: [] as Array<{ schedule_id: string | null; account_id: string; amount: number }>,
+    sessions: [] as Array<{ id: string; account_id: string; period_start: string; period_end: string; statement_opening: number; statement_closing: number; selected: string[]; status: string }>,
     counter: 0,
   }
 }
@@ -209,6 +210,42 @@ on('GET', /^\/reports\/cash-forecast$/, (route, { state, query }) => json(route,
   from: query.get('from'), to: query.get('to'), currency: 'JPY', scenario: 'baseline', coverage: 'partial_assumptions', warnings: [], assumptions: ['Same-day clearing order is unknown'], lowest_by_account: {},
   days: cashRows(state).map((row) => ({ account_id: row.account_id, date: state.today, start_balance: row.liquid_balance, end_balance: row.liquid_balance, movements: [], intraday_order_uncertain: false, shortfall: false, coverage: row.coverage })),
 }))
+
+const periodPostings = (state: LedgerState, accountId: string, from: string, to: string) => state.events.flatMap((event) => event.postings).filter((posting) => posting.account_id === accountId && posting.effective_date >= from && posting.effective_date <= to)
+function sessionView(state: LedgerState, row: LedgerState['sessions'][number]) {
+  const postings = periodPostings(state, row.account_id, row.period_start, row.period_end)
+  const calculated = row.statement_opening + postings.filter((posting) => row.selected.includes(posting.id)).reduce((sum, posting) => sum + posting.delta, 0)
+  const unmatched = postings.filter((posting) => !row.selected.includes(posting.id)).map((posting) => ({ id: posting.id, delta: posting.delta, effective_date: posting.effective_date }))
+  const difference = row.statement_closing - calculated
+  return { id: row.id, account_id: row.account_id, period_start: row.period_start, period_end: row.period_end, statement_opening: row.statement_opening, statement_closing: row.statement_closing, calculated_closing: calculated, all_postings_closing: calculated, difference, baseline_before_period: row.statement_opening, opening_mismatch: false, selected_posting_ids: row.selected, unmatched_postings: unmatched, status: row.status, captured_at: '2026-09-30T00:00:00', suggestions: difference ? ['Check for a missing fee, duplicate, refund or timing difference'] : [] }
+}
+on('GET', /^\/accounts\/[^/]+\/statement-balance$/, (route, { state, path, query }) => {
+  const id = path.split('/')[2]
+  const from = query.get('from_')!
+  const to = query.get('to')!
+  const before = new Date(Date.UTC(Number(from.slice(0, 4)), Number(from.slice(5, 7)) - 1, Number(from.slice(8, 10)) - 1)).toISOString().slice(0, 10)
+  return json(route, { account_id: id, from, to, opening: balanceOf(state, id, before), closing: balanceOf(state, id, to), postings: periodPostings(state, id, from, to).map((posting) => ({ id: posting.id, amount: posting.delta, effective_date: posting.effective_date })), coverage: 'complete' })
+})
+on('POST', /^\/reconciliations$/, (route, { state, body }) => {
+  const row = { id: nextId(state, 'rec'), account_id: String(body.account_id), period_start: String(body.period_start), period_end: String(body.period_end), statement_opening: Number(body.statement_opening), statement_closing: Number(body.statement_closing), selected: (body.selected_posting_ids as string[]) ?? [], status: 'draft' }
+  state.sessions.push(row)
+  return json(route, sessionView(state, row), 201)
+})
+on('GET', /^\/reconciliations\/[^/]+$/, (route, { state, path }) => json(route, sessionView(state, state.sessions.find((row) => row.id === path.split('/')[2])!)))
+on('POST', /^\/reconciliations\/[^/]+\/include\/[^/]+$/, (route, { state, path }) => {
+  const [, , id, , posting] = path.split('/')
+  const row = state.sessions.find((item) => item.id === id)!
+  row.selected.push(posting)
+  return json(route, sessionView(state, row))
+})
+on('POST', /^\/reconciliations\/[^/]+\/confirm$/, (route, { state, path }) => {
+  const row = state.sessions.find((item) => item.id === path.split('/')[2])!
+  const view = sessionView(state, row)
+  if (view.difference !== 0 || view.unmatched_postings.length) return json(route, { detail: 'Resolve difference, unmatched postings and opening mismatch before confirmation' }, 409)
+  row.status = 'confirmed'
+  return json(route, sessionView(state, row))
+})
+on('GET', /^\/ledger-quality$/, (route, { state }) => json(route, { unknown_purchase_dates: 0, unresolved_legacy_records: null, missing_openings: state.accounts.filter((account) => !state.openings[account.id]).map((account) => account.id), stale_or_missing_valuations: [], unreconciled_sessions: state.sessions.filter((row) => row.status !== 'confirmed').map((row) => row.id), accounts_without_confirmed_statement: [], reserve_shortfall: 0, schedule_debt_mismatch: [], balance_adjustments: 0 }))
 
 // Legacy screens still render on a full-ledger deployment.
 on('GET', /^\/opening-balances$/, (route) => json(route, []))

@@ -157,3 +157,41 @@ test('schedules a card purchase, reserves cash for it and repays it once', async
 function balanceOfBank(state: Awaited<ReturnType<typeof mockLedgerApi>>) {
   return balanceOf(state, 'acct-bank', '2026-09-30')
 }
+
+test('closes a month against a bank statement after finding a missing fee', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const state = await mockLedgerApi(page)
+  state.today = '2026-09-30'
+  state.accounts.push({ id: 'acct-bank', user_id: 'e2e-user', name: 'Everyday Bank', kind: 'BANK', currency: 'JPY', archived_at: null, created_at: '', updated_at: '' })
+  state.openings['acct-bank'] = { amount: 100000, as_of_date: '2026-09-01', revision: 1 }
+  state.events.push({ id: 'shop', kind: 'EXPENSE', amount: 4000, category_id: 'cat-groceries', description: 'Pharmacy', occurred_on: '2026-09-05', date_basis: 'known', recorded_at: '2026-09-05T10:00:00', is_reversal: false, original_event_id: null, reverses_event_id: null, replaces_event_id: null, postings: [{ id: 'p-shop', account_id: 'acct-bank', delta: -4000, effective_date: '2026-09-05' }] })
+  await signIn(page)
+  await page.getByRole('button', { name: 'Open navigation' }).click()
+  await page.getByRole('complementary', { name: 'Mobile menu' }).getByRole('link', { name: 'Review', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Review', level: 2 })).toBeVisible()
+  await page.getByLabel('Account', { exact: true }).selectOption('acct-bank')
+  await page.getByLabel('Statement from').fill('2026-09-01')
+  await page.getByLabel('Statement to').fill('2026-09-30')
+  await page.getByLabel('Statement opening balance (JPY)').fill('100000')
+  await page.getByLabel('Statement closing balance (JPY)').fill('95500')
+  await page.getByRole('button', { name: 'Start check' }).click()
+
+  // Failure path: the statement shows ¥500 less than the app, so confirmation is blocked.
+  const session = page.getByRole('region', { name: /Everyday Bank · Sep 1, 2026/ })
+  await expect(session.getByText('Unexplained difference', { exact: true })).toBeVisible()
+  await expect(session.getByText('¥500', { exact: true })).toBeVisible()
+  await expect(session.getByRole('button', { name: 'Confirm reconciliation' })).toBeDisabled()
+
+  await session.getByRole('button', { name: 'Record a missing entry' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Amount (JPY)').fill('500')
+  await dialog.getByLabel('Category').selectOption('cat-groceries')
+  await dialog.getByLabel('Description (optional)').fill('Monthly account fee')
+  await dialog.getByRole('button', { name: 'Record purchase' }).click()
+  await session.getByRole('button', { name: /Include entry posted 2026-09-30/ }).click()
+  await expect(session.getByText('None')).toBeVisible()
+  await session.getByRole('button', { name: 'Confirm reconciliation' }).click()
+  await expect(session.getByText('Reconciled', { exact: true })).toBeVisible()
+  expect(state.sessions[0].status).toBe('confirmed')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})

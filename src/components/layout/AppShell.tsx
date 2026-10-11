@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { isFeatureEnabled, type LedgerFeature } from '@/config/features'
 import { useUiStore } from '@/store/uiStore'
 
-type IconName = 'dashboard' | 'transactions' | 'categories' | 'reports' | 'accounts' | 'cards' | 'budget' | 'savings' | 'investments'
+type IconName = 'dashboard' | 'transactions' | 'categories' | 'reports' | 'accounts' | 'cards' | 'budget' | 'savings' | 'investments' | 'review'
 // Ledger entries appear only once their backend contract is released on this deployment.
 const allPaths: Array<{ to: string; label: string; icon: IconName; feature?: LedgerFeature; hidden?: boolean }> = [
   { to: '/', label: 'Dashboard', icon: 'dashboard' },
@@ -18,6 +18,7 @@ const allPaths: Array<{ to: string; label: string; icon: IconName; feature?: Led
   { to: '/investments', label: 'Investments', icon: 'investments', feature: 'investments' },
   { to: '/opening-balances', label: 'Opening balances', icon: 'dashboard' },
   { to: '/setup/migration', label: 'Migration setup', icon: 'accounts', feature: 'cutover', hidden: true },
+  { to: '/review', label: 'Review', icon: 'review', feature: 'reconciliation' },
   { to: '/categories', label: 'Categories', icon: 'categories' },
   { to: '/reports', label: 'Reports', icon: 'reports' },
 ]
@@ -41,6 +42,7 @@ function Icon({ name }: { name: IconName }) {
     budget: <><circle cx="12" cy="12" r="8"/><path d="M12 4v8h8"/></>,
     savings: <><path d="M5 11a7 6 0 0 1 14 0v3a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z"/><path d="M9 17v3m6-3v3M12 8v4"/></>,
     investments: <><path d="M4 19 10 13l4 4 6-8"/><path d="M15 9h5v5"/></>,
+    review: <><path d="M9 11l2 2 4-4"/><rect x="4" y="3" width="16" height="18" rx="2"/></>,
     cards: <><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/></>,
   }
   return <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" aria-hidden="true" {...common}>{pathsByName[name]}</svg>
