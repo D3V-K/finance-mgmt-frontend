@@ -93,6 +93,10 @@ Archive is the normal way to retire a category: past entries and report totals k
 
 With `dashboard` enabled, `/` uses the server's dashboard aggregate. It leads with "Available after commitments", what is left in this payday's budget, and the next withdrawal. Account balances, money set aside, and known bills not yet reserved are listed per account, because one account's cash never covers another account's withdrawal. A total is shown only when every account is known; otherwise unknown figures say "Needs review" and give the reason. The cash forecast (`/reports/cash-forecast`) is per account, has an accessible day-by-day table alongside the chart, names the date an account would go below zero, shows same-day clearing uncertainty verbatim, and lists its assumptions. Scenario items such as an unconfirmed bonus appear only when the scenario is selected, and expected salary is future income, never present cash. Scenario, forecast range, forecast account, `as_of` date and month are URL parameters. Server warnings are shown verbatim, each with a link to the screen that resolves it. The forecast and monthly sections load and retry independently of the headline figures.
 
+### Investments and net worth (`investments`)
+
+`/investments` lists brokerage-cash accounts with their cash balance and the latest manual, securities-only value. Values are history: a second value for the same date is refused, and holdings changes noted after a value mark it stale. Noting a trade records only that holdings changed; nothing is fetched, recommended or executed. With `investments` enabled, Reports adds "Net worth": bank and cash, brokerage cash, securities and card amount owed from the server's financial position, plus a month-end series with gaps wherever the server reports it incomplete. With `events` enabled, Reports uses canonical events by known purchase date ("Income minus spending", spending after refunds), keeps categories whose refunds bring spending to zero or below, and relabels the legacy chart as "Net balance from earlier Cash/Bank records" with its basis, so it is never presented as net worth.
+
 ## Architecture
 
 ### Static Hosting (S3 + CloudFront)

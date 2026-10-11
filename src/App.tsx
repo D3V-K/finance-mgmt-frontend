@@ -18,6 +18,7 @@ const AccountsPage = lazy(() => import('@/pages/AccountsPage').then((module) => 
 const CardsPage = lazy(() => import('@/pages/CardsPage').then((module) => ({ default: module.CardsPage })))
 const BudgetPage = lazy(() => import('@/pages/BudgetPage').then((module) => ({ default: module.BudgetPage })))
 const SavingsPage = lazy(() => import('@/pages/SavingsPage').then((module) => ({ default: module.SavingsPage })))
+const InvestmentsPage = lazy(() => import('@/pages/InvestmentsPage').then((module) => ({ default: module.InvestmentsPage })))
 const MigrationPage = lazy(() => import('@/pages/MigrationPage').then((module) => ({ default: module.MigrationPage })))
 
 export default function App() {
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="cards/:cardId" element={<FeatureRoute feature="cards"><CardsPage /></FeatureRoute>} />
             <Route path="budget" element={<FeatureRoute feature="budgets"><BudgetPage /></FeatureRoute>} />
             <Route path="savings" element={<FeatureRoute feature="budgets"><SavingsPage /></FeatureRoute>} />
+            <Route path="investments" element={<FeatureRoute feature="investments"><InvestmentsPage /></FeatureRoute>} />
             <Route path="setup/migration" element={<FeatureRoute feature="cutover"><FeatureRoute feature="accounts"><MigrationPage /></FeatureRoute></FeatureRoute>} />
             <Route path="categories" element={<CategoriesPage />} />
             <Route path="reports" element={<ReportsPage />} />
